@@ -104,24 +104,37 @@ function buildDebtLetterPages(d, year) {
     var garudaUrl = cfg.garudaUrl;
     var bylawName = 'เทศบัญญัติ' + orgName;
 
-    // Extract address details from orgAddr
-    var parsedTambon = cfg.tambon;
-    var parsedAmphoe = cfg.amphoe;
-    var parsedProvince = cfg.province;
+    // Extract address details from orgAddr or settings
+    var parsedTambon = settings.org_subdistrict_name ? 'ตำบล' + settings.org_subdistrict_name : cfg.tambon;
+    var parsedAmphoe = settings.org_district_name ? 'อำเภอ' + settings.org_district_name.replace('เขต', '').replace('อำเภอ', '') : cfg.amphoe;
+    var parsedProvince = settings.org_province_name ? 'จังหวัด' + settings.org_province_name : cfg.province;
     var parsedPostCode = cfg.postCode;
 
+    // Fallback to parsing orgAddr if settings names are missing
     if (orgAddr) {
-        var mTambon = orgAddr.match(/ต\.\s*(.+?)(?=\s+อ\.|\s+จ\.|\s+\d|$)/);
-        if(mTambon) parsedTambon = 'ตำบล' + mTambon[1].replace(/,/, '').trim();
+        if (!settings.org_subdistrict_name) {
+            var mTambon = orgAddr.match(/ต\.\s*(.+?)(?=\s+อ\.|\s+จ\.|\s+\d|$)/);
+            if(mTambon) parsedTambon = 'ตำบล' + mTambon[1].replace(/,/, '').trim();
+        }
         
-        var mAmphoe = orgAddr.match(/อ\.\s*(.+?)(?=\s+จ\.|\s+\d|$)/);
-        if(mAmphoe) parsedAmphoe = 'อำเภอ' + mAmphoe[1].replace(/,/, '').trim();
+        if (!settings.org_district_name) {
+            var mAmphoe = orgAddr.match(/อ\.\s*(.+?)(?=\s+จ\.|\s+\d|$)/);
+            if(mAmphoe) parsedAmphoe = 'อำเภอ' + mAmphoe[1].replace(/,/, '').trim();
+        }
         
-        var mProvince = orgAddr.match(/จ\.\s*(.+?)(?=\s+\d|$)/);
-        if(mProvince) parsedProvince = 'จังหวัด' + mProvince[1].replace(/,/, '').trim();
+        if (!settings.org_province_name) {
+            var mProvince = orgAddr.match(/จ\.\s*(.+?)(?=\s+\d|$)/);
+            if(mProvince) parsedProvince = 'จังหวัด' + mProvince[1].replace(/,/, '').trim();
+        }
 
         var mPostCode = orgAddr.match(/(\d{5})/);
         if(mPostCode) parsedPostCode = mPostCode[1];
+    }
+    
+    // Also try to extract postcode from env_post_office if not found in orgAddr
+    if (!mPostCode && postOfficeName) {
+        var mPostCode2 = postOfficeName.match(/(\d{5})/);
+        if(mPostCode2) parsedPostCode = mPostCode2[1];
     }
 
     var now = new Date();
@@ -150,6 +163,25 @@ function buildDebtLetterPages(d, year) {
             qrCodeHTML = '<div class="qr-code-img" style="display:flex;align-items:center;justify-content:center;font-size:8pt;color:#999;text-align:center;">ยังไม่ได้ตั้งค่า<br>QR Code</div>';
         }
 
+    var displayOrgAddr = orgAddr;
+    if (settings.org_province_name) {
+        var addrParts = [];
+        if (settings.org_address) addrParts.push(settings.org_address);
+        if (settings.org_subdistrict_name && !String(settings.org_address).includes(settings.org_subdistrict_name)) {
+            addrParts.push('ต.' + settings.org_subdistrict_name);
+        }
+        if (settings.org_district_name && !String(settings.org_address).includes(settings.org_district_name.replace('อำเภอ', ''))) {
+            addrParts.push('อ.' + settings.org_district_name.replace('เขต', '').replace('อำเภอ', ''));
+        }
+        if (settings.org_province_name && !String(settings.org_address).includes(settings.org_province_name)) {
+            addrParts.push('จ.' + settings.org_province_name);
+        }
+        if (parsedPostCode && !String(settings.org_address).includes(parsedPostCode)) {
+            addrParts.push(parsedPostCode);
+        }
+        displayOrgAddr = addrParts.join(' ');
+    }
+
     // ============ PAGE 1: หนังสือราชการภายนอก ============
     var page1 =
         '<div class="page">' +
@@ -162,7 +194,7 @@ function buildDebtLetterPages(d, year) {
         // ที่ + ส่วนราชการ
         '<div class="header-row">' +
             '<div class="doc-no">ที่ ' + docNo + '</div>' +
-            '<div class="org-info">' + orgName + '<br>' + orgAddr + '</div>' +
+            '<div class="org-info">' + orgName + '<br>' + displayOrgAddr + '</div>' +
         '</div>' +
 
         // วันที่
@@ -225,11 +257,11 @@ function buildDebtLetterPages(d, year) {
 
         '</div>'; // end page
 
-    var orgAddrLine1 = orgAddr;
+    var orgAddrLine1 = displayOrgAddr;
     var orgAddrLine2 = orgTel ? 'โทร.' + orgTel.replace(/^โทร\./, '') : '';
-    var provMatch = orgAddr.match(/(จ\..+)/);
+    var provMatch = displayOrgAddr.match(/(จ\..+)/);
     if (provMatch) {
-        orgAddrLine1 = orgAddr.substring(0, provMatch.index).trim();
+        orgAddrLine1 = displayOrgAddr.substring(0, provMatch.index).trim();
         orgAddrLine2 = provMatch[1].trim() + (orgTel ? ' โทร.' + orgTel.replace(/^โทร\./, '') : '');
     }
 
@@ -269,11 +301,28 @@ function buildDebtLetterPages(d, year) {
 }
 
 // พิมพ์ทวงหนี้รายบุคคล
-function printDebtLetter(customerId) {
+async function printDebtLetter(customerId) {
     var year = (typeof debtorSelectedYear !== 'undefined' && debtorSelectedYear) ? debtorSelectedYear : getCurrentFiscalYear();
     var debtors = window.currentFilteredDebtors || calculateDebtors(year);
     var d = debtors.find(function(x){ return x.id === customerId; });
     if (!d) { showToast('ไม่พบข้อมูลลูกหนี้','error'); return; }
+
+    // Fetch settings directly from Supabase
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const { data } = await supabaseClient.from('waste_settings').select('*').limit(1).single();
+            if (data) {
+                if (typeof ThaiAddress !== 'undefined') {
+                    await ThaiAddress.loadData();
+                    if (data.org_province) data.org_province_name = ThaiAddress.getProvinceName(parseInt(data.org_province));
+                    if (data.org_district) data.org_district_name = ThaiAddress.getDistrictName(parseInt(data.org_district));
+                }
+                localStorage.setItem('waste_settings', JSON.stringify(data));
+            }
+        } catch (e) {
+            console.warn('Could not fetch settings from Supabase', e);
+        }
+    }
 
     var css = buildDebtLetterCSS();
     var pages = buildDebtLetterPages(d, year);
@@ -287,7 +336,7 @@ function printDebtLetter(customerId) {
 }
 
 // พิมพ์ทวงหนี้ทั้งหมด
-function printAllDebtLetters() {
+async function printAllDebtLetters() {
     var year = (typeof debtorSelectedYear !== 'undefined' && debtorSelectedYear) ? debtorSelectedYear : getCurrentFiscalYear();
     var debtors = window.currentFilteredDebtors || calculateDebtors(year);
 
@@ -304,8 +353,34 @@ function printAllDebtLetters() {
         confirmButtonText: 'พิมพ์ทั้งหมด',
         cancelButtonText: 'ยกเลิก',
         confirmButtonColor: '#1a56db'
-    }).then(function(r) {
+    }).then(async function(r) {
         if (r.isConfirmed) {
+            Swal.fire({
+                title: 'กำลังเตรียมข้อมูล...',
+                text: 'กรุณารอสักครู่',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            // Fetch settings directly from Supabase
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    const { data } = await supabaseClient.from('waste_settings').select('*').limit(1).single();
+                    if (data) {
+                        if (typeof ThaiAddress !== 'undefined') {
+                            await ThaiAddress.loadData();
+                            if (data.org_province) data.org_province_name = ThaiAddress.getProvinceName(parseInt(data.org_province));
+                            if (data.org_district) data.org_district_name = ThaiAddress.getDistrictName(parseInt(data.org_district));
+                        }
+                        localStorage.setItem('waste_settings', JSON.stringify(data));
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch settings from Supabase', e);
+                }
+            }
+            
+            Swal.close();
+
             var css = buildDebtLetterCSS();
             var allPages = '';
             debtors.forEach(function(d) {

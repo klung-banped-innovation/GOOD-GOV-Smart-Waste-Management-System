@@ -60,6 +60,12 @@ async function loadSettings() {
         if (settings.bank_account_name) document.getElementById('bankAccountName').value = settings.bank_account_name;
         if (settings.bank_name) document.getElementById('bankName').value = settings.bank_name;
         if (settings.bank_branch) document.getElementById('bankBranch').value = settings.bank_branch;
+        
+        // Load Backup URL from localStorage
+        const gasBackupUrlLocal = localStorage.getItem('waste_gasBackupUrl');
+        if (gasBackupUrlLocal && document.getElementById('gasBackupUrl')) {
+            document.getElementById('gasBackupUrl').value = gasBackupUrlLocal;
+        }
 
         if (settings.org_logo) {
             const preview = document.getElementById('orgLogoPreview');
@@ -222,6 +228,12 @@ async function saveSettings() {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...';
 
         const gasUrl = document.getElementById('gasUrl').value.trim();
+        
+        // Save Backup URL to localStorage
+        const gasBackupUrl = document.getElementById('gasBackupUrl') ? document.getElementById('gasBackupUrl').value.trim() : '';
+        if (gasBackupUrl !== undefined) {
+            localStorage.setItem('waste_gasBackupUrl', gasBackupUrl);
+        }
 
         // 1. Upload new images if any
         let finalLogo = document.getElementById('orgLogoPreview').src;
@@ -256,17 +268,22 @@ async function saveSettings() {
         if(finalQrCodePromptPay.includes(window.location.origin) || finalQrCodePromptPay === '') finalQrCodePromptPay = null;
         if(finalQrCode.includes(window.location.origin) || finalQrCode === '') finalQrCode = null;
 
+        const provSelect = document.getElementById('orgProvince');
+        const distSelect = document.getElementById('orgDistrict');
         const subSelect = document.getElementById('orgSubdistrict');
+        
+        const provName = provSelect.options[provSelect.selectedIndex]?.text;
+        const distName = distSelect.options[distSelect.selectedIndex]?.text;
         const subName = subSelect.options[subSelect.selectedIndex]?.text;
 
         const payload = {
             org_name: document.getElementById('orgName').value.trim(),
             org_address: document.getElementById('orgAddress').value.trim(),
             org_phone: document.getElementById('orgPhone').value.trim(),
-            org_province: document.getElementById('orgProvince')?.value || null,
-            org_district: document.getElementById('orgDistrict')?.value || null,
-            org_subdistrict: document.getElementById('orgSubdistrict')?.value || null,
-            org_subdistrict_name: subName !== '-- เลือกตำบล --' ? subName : null,
+            org_province: provSelect?.value || null,
+            org_district: distSelect?.value || null,
+            org_subdistrict: subSelect?.value || null,
+            org_subdistrict_name: subName && subName !== '-- เลือกตำบล --' ? subName : null,
             doc_invoice_no: document.getElementById('docInvoiceNo').value.trim(),
             mayor_name: document.getElementById('mayorName').value.trim(),
             mayor_title: document.getElementById('mayorTitle').value.trim(),
@@ -299,8 +316,12 @@ async function saveSettings() {
             }
         }
 
-        // 3. Save to localStorage fallback
-        localStorage.setItem('waste_settings', JSON.stringify({id: currentSettingsId, ...payload}));
+        // 3. Save to localStorage with names included
+        const localPayload = { ...payload };
+        localPayload.org_province_name = provName && provName !== '-- เลือกจังหวัด --' ? provName : null;
+        localPayload.org_district_name = distName && distName !== '-- เลือกอำเภอ --' ? distName : null;
+        
+        localStorage.setItem('waste_settings', JSON.stringify({id: currentSettingsId, ...localPayload}));
 
         // Reset the tracking vars
         orgLogoBase64 = null;

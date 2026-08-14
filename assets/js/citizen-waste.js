@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof fetchWasteSettings === 'function') fetchTasks.push(fetchWasteSettings());
     if (typeof fetchWasteFeeHistory === 'function') fetchTasks.push(fetchWasteFeeHistory());
     if (typeof fetchWasteCustomers === 'function') fetchTasks.push(fetchWasteCustomers());
+    if (typeof fetchWastePayments === 'function') fetchTasks.push(fetchWastePayments());
     if (typeof fetchMonthlyStatus === 'function') fetchTasks.push(fetchMonthlyStatus());
 
     Promise.all(fetchTasks).then(() => {

@@ -558,8 +558,12 @@ async function deleteWastePayment(paymentId) {
             .update({ payment_id: null, status: 'unpaid' })
             .eq('payment_id', paymentId);
         if (updErr) {
-            console.error('Error updating monthly status in Supabase:', updErr);
-            return false;
+            if (updErr.message && updErr.message.includes("Could not find the table")) {
+                // Table doesn't exist, safely ignore
+            } else {
+                console.error('Error updating monthly status in Supabase:', updErr);
+                return false;
+            }
         }
     }
 
