@@ -30,11 +30,11 @@
                     <li class="breadcrumb-item active">ลูกหนี้ค้างชำระ</li>
                 </ol></nav>
             </div>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-primary" onclick="printAllDebtLetters()"><i class="fa-solid fa-print me-1"></i>พิมพ์ทวงหนี้ทั้งหมด</button>
-                <button class="btn btn-sm btn-outline-danger" onclick="showToast('ส่งแจ้งเตือนทั้งหมดแล้ว','success')"><i class="fa-brands fa-line me-1"></i>แจ้งเตือนทั้งหมด</button>
-                <button class="btn btn-sm btn-outline-success" onclick="showToast('Export Excel สำเร็จ','success')"><i class="fa-solid fa-file-excel me-1"></i>Export</button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="showToast('Export PDF สำเร็จ','success')"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+            <div class="d-flex align-items-center mb-3 mb-md-0">
+                <button class="btn btn-sm btn-primary me-2" onclick="printAllDebtLetters()"><i class="fa-solid fa-print me-1"></i>พิมพ์ทวงหนี้ทั้งหมด</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="sendBulkLineNotification()"><i class="fa-brands fa-line me-1"></i>แจ้งเตือนทั้งหมด</button>
+                <button class="btn btn-sm btn-outline-success ms-2" onclick="showToast('Export Excel สำเร็จ','success')"><i class="fa-solid fa-file-excel me-1"></i>Export</button>
+                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="showToast('Export PDF สำเร็จ','success')"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
             </div>
         </div>
 
@@ -221,7 +221,7 @@ function renderDebtors() {
         <td class="text-xs">${d.phone||'-'}</td>
         <td><span class="badge ${getDebtBadgeClass(d.unpaid_count)}">${getDebtBadgeLabel(d.unpaid_count)}</span></td>
         <td class="pe-4 text-center">
-            <button class="btn btn-xs btn-outline-warning me-1" onclick="showToast('ส่งแจ้งเตือน ${d.name}','success')" title="แจ้งเตือน"><i class="fa-solid fa-bell"></i></button>
+            <button class="btn btn-xs btn-outline-warning me-1" onclick="showLineNotifyModal('${d.id}', 'OVERDUE', '${d.total_debt}', null, null, null, '${d.unpaid_count}', '${d.unpaid_months.join(', ')}')" title="แจ้งเตือน"><i class="fa-solid fa-bell"></i></button>
             <button class="btn btn-xs btn-outline-secondary" onclick="printDebtLetter('${d.id}')" title="พิมพ์ทวงหนี้"><i class="fa-solid fa-print"></i></button>
         </td>
     </tr>`).join('') : '<tr><td colspan="8" class="text-center py-4 text-muted">ไม่มีลูกหนี้ค้างชำระ</td></tr>';
@@ -230,6 +230,150 @@ function renderDebtors() {
     window.currentFilteredDebtors = debtors;
 }
 </script>
+<!-- LINE Notification Modal -->
+<div class="modal fade" id="lineNotifyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow-lg">
+            <div class="modal-header border-0 pb-0" id="lineNotifyHeader">
+                <h5 class="modal-title fw-bold" id="lineNotifyTitle">ส่งแจ้งเตือน LINE</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert mb-4" id="lineNotifyAlertInfo" style="background: #f0f5ff; border: none; border-radius: 12px;">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="fa-solid fa-user me-2 text-primary"></i>
+                        <strong id="lineNotifyCustomerName">ชื่อลูกค้า</strong>
+                    </div>
+                    <div class="text-muted text-sm mb-1">รหัสลูกค้า: <span id="lineNotifyCustomerId"></span></div>
+                    <div class="text-muted text-sm mb-1">บ้านเลขที่: <span id="lineNotifyHouseNo"></span></div>
+                    <div class="text-danger fw-bold mt-2" style="font-size: 1.1rem;">ยอดเงิน: ฿<span id="lineNotifyAmount">0</span></div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center p-3 mb-3" style="background: #f0fdf4; border: 1px solid #dcfce7; border-radius: 12px;">
+                    <div class="d-flex align-items-center">
+                        <i class="fa-brands fa-line fa-2x text-success me-3"></i>
+                        <div>
+                            <div class="fw-bold text-success">บัญชี LINE ที่เชื่อมโยง</div>
+                            <div class="text-sm text-muted" id="lineNotifyCountText">กำลังโหลด...</div>
+                        </div>
+                    </div>
+                    <span class="badge bg-success rounded-pill fs-6" id="lineNotifyCountBadge">0</span>
+                </div>
+                
+                <div id="lineNotifyPreviousStatus" class="mb-3 text-sm text-center"></div>
+
+                <input type="hidden" id="lineNotifyType">
+                <input type="hidden" id="lineNotifyPaymentId">
+                <input type="hidden" id="lineNotifyReceiptNo">
+
+                <button class="btn btn-success w-100 py-3 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-2" id="btnSendLineNotify" onclick="sendLineNotification()">
+                    <i class="fa-solid fa-paper-plane"></i> ยืนยันการส่งข้อความ
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function sendBulkLineNotification() {
+    var year = (typeof debtorSelectedYear !== 'undefined' && debtorSelectedYear) ? debtorSelectedYear : getCurrentFiscalYear();
+    var debtors = window.currentFilteredDebtors || calculateDebtors(year);
+
+    if (debtors.length === 0) {
+        showToast('ไม่มีลูกหนี้ค้างชำระในรายการ','warning');
+        return;
+    }
+
+    Swal.fire({
+        title: 'แจ้งเตือนลูกหนี้ทั้งหมด?',
+        html: `กำลังจะส่งแจ้งเตือนผ่าน LINE ให้กับลูกหนี้ <b>${debtors.length}</b> ราย (เฉพาะรายที่ผูกบัญชี LINE ไว้)`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ยืนยันส่งทั้งหมด',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#dc3545'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'กำลังส่งแจ้งเตือน...',
+                html: 'กรุณารอสักครู่ ห้ามปิดหน้าต่างนี้<br><br><div class="progress"><div id="bulkNotifyProgress" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div></div><br><div id="bulkNotifyText" class="text-sm text-muted">0 / ' + debtors.length + '</div>',
+                allowOutsideClick: false,
+                showConfirmButton: false
+            });
+
+            let successCount = 0;
+            let failCount = 0;
+            let noLineCount = 0;
+
+            for (let i = 0; i < debtors.length; i++) {
+                const d = debtors[i];
+                
+                // Update progress UI
+                const percent = Math.round(((i) / debtors.length) * 100);
+                const pBar = document.getElementById('bulkNotifyProgress');
+                const pText = document.getElementById('bulkNotifyText');
+                if(pBar) pBar.style.width = percent + '%';
+                if(pText) pText.textContent = `${i + 1} / ${debtors.length} (${d.name})`;
+
+                try {
+                    // Check if customer has LINE links
+                    const { count, error: countError } = await supabaseClient
+                        .from('waste_customer_line_links')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('customer_id', d.id);
+                        
+                    if (countError || count === 0) {
+                        noLineCount++;
+                        continue;
+                    }
+
+                    const payload = {
+                        customer_id: d.id,
+                        notification_type: 'OVERDUE',
+                        amount: parseFloat(d.total_debt) || 0,
+                        customer_name: d.name,
+                        house_no: `${d.house_no} ม.${d.moo}`,
+                        receipt_no: '',
+                        unpaid_count: d.unpaid_count,
+                        unpaid_months_text: d.unpaid_months.join(', '),
+                        payment_url: 'https://good-gov-banped-smart-waste-managem.vercel.app/'
+                    };
+                    
+                    const { data, error } = await supabaseClient.functions.invoke('waste-line-notify', {
+                        body: payload
+                    });
+                    
+                    if (error) throw error;
+                    
+                    const results = data.results || [];
+                    const failures = results.filter(r => r.status === 'failed');
+                    if (failures.length > 0 && failures.length === results.length) {
+                        failCount++;
+                    } else {
+                        successCount++;
+                    }
+                    
+                } catch(e) {
+                    failCount++;
+                    console.error('Error sending to', d.id, e);
+                }
+                
+                // Delay slightly to avoid hitting API rate limits too hard
+                await new Promise(r => setTimeout(r, 300));
+            }
+            
+            Swal.fire({
+                title: 'ส่งแจ้งเตือนเสร็จสิ้น',
+                html: `ส่งสำเร็จ: <b class="text-success">${successCount}</b> ราย<br>ล้มเหลว: <b class="text-danger">${failCount}</b> ราย<br>ไม่มี LINE: <b class="text-muted">${noLineCount}</b> ราย`,
+                icon: 'info',
+                confirmButtonText: 'ตกลง'
+            });
+        }
+    });
+}
+</script>
+<script src="assets/js/admin-line-notify.js?v=20260814"></script>
+<script src="assets/js/thai-address.js"></script>
 <script src="assets/js/waste-debt-letter.js"></script>
 </body>
 </html>

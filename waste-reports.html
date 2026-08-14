@@ -205,7 +205,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             fetchWasteFeeTypes(),
             fetchWastePayments(),
             fetchMonthlyStatus(),
-            fetchWasteCustomers()
+            fetchWasteCustomers(),
+            (typeof fetchLineNotifiedPayments === 'function' ? fetchLineNotifiedPayments() : Promise.resolve())
         ]);
         
         // 1. Initial Render with Local Storage Data
@@ -399,6 +400,12 @@ function renderReports(source) {
             var c = customers.find(function(x){ return x.id === p.customer_id; });
             var hNo = c && c.house_no ? c.house_no : '-';
 
+            var isLineNotified = false;
+            if (typeof notifiedPaymentIds !== 'undefined') {
+                isLineNotified = notifiedPaymentIds.has(p.id);
+            }
+            var bellClass = isLineNotified ? 'btn-success' : 'btn-warning';
+
             allRows += '<tr' + rowClass + '>' +
                 '<td class="ps-4">' + printSlipBtn + '</td>' +
                 '<td class="text-xs">' + formatThaiDateShort(p.date) + ' ' + (p.time||'') + '</td>' +
@@ -411,7 +418,7 @@ function renderReports(source) {
                 '<td class="text-xs">' + staffName + '</td>' +
                 '<td class="text-center">' +
                     '<button class="btn btn-primary btn-sm shadow-sm px-3" style="border-radius: 8px;" onclick="printReceiptA4(getWastePayments().find(function(x){return x.id===\'' + p.id + '\'}))" title="พิมพ์ A4"><i class="fa-solid fa-print"></i></button>' +
-                    '<button class="btn btn-warning btn-sm shadow-sm px-3 ms-1" style="border-radius: 8px;" onclick="showLineNotifyModal(\'' + p.customer_id + '\', \'PAYMENT_SUCCESS\', \'' + p.amount + '\', \'' + p.receipt_no + '\', \'' + p.id + '\')" title="แจ้งชำระเงินทาง LINE"><i class="fa-solid fa-bell text-white"></i></button>' +
+                    '<button id="btn-line-notify-' + p.id + '" class="btn ' + bellClass + ' btn-sm shadow-sm px-3 ms-1" style="border-radius: 8px;" onclick="showLineNotifyModal(\'' + p.customer_id + '\', \'PAYMENT_SUCCESS\', \'' + p.amount + '\', \'' + p.receipt_no + '\', \'' + p.id + '\', \'' + (p.receipt_url || '') + '\')" title="แจ้งชำระเงินทาง LINE"><i class="fa-solid fa-bell text-white"></i></button>' +
                 '</td>' +
                 '<td class="pe-4 text-center">' +
                     cancelBtn +
@@ -464,6 +471,12 @@ function renderReports(source) {
             var c = customers.find(function(x){ return x.id === p.customer_id; });
             var hNo = c && c.house_no ? c.house_no : '-';
 
+            var isLineNotified = false;
+            if (typeof notifiedPaymentIds !== 'undefined') {
+                isLineNotified = notifiedPaymentIds.has(p.id);
+            }
+            var bellClass = isLineNotified ? 'btn-success' : 'btn-warning';
+
             rows += '<tr' + rowClass + '>' +
                 '<td class="ps-4">' + printSlipBtn + '</td>' +
                 '<td class="fw-semibold text-xs">' + p.receipt_no + statusBadge + '</td>' +
@@ -475,7 +488,7 @@ function renderReports(source) {
                 '<td class="text-center">' +
                     '<button class="btn btn-info btn-sm text-white shadow-sm px-3 me-1" style="border-radius: 8px;" onclick="viewReceipt(\'' + p.id + '\')" title="ดูใบเสร็จ"><i class="fa-solid fa-eye"></i></button>' +
                     '<button class="btn btn-primary btn-sm shadow-sm px-3" style="border-radius: 8px;" onclick="printReceiptA4(getWastePayments().find(function(x){return x.id===\'' + p.id + '\'}))" title="พิมพ์ A4"><i class="fa-solid fa-print"></i></button>' +
-                    '<button class="btn btn-warning btn-sm shadow-sm px-3 ms-1" style="border-radius: 8px;" onclick="showLineNotifyModal(\'' + p.customer_id + '\', \'PAYMENT_SUCCESS\', \'' + p.amount + '\', \'' + p.receipt_no + '\', \'' + p.id + '\')" title="แจ้งชำระเงินทาง LINE"><i class="fa-solid fa-bell text-white"></i></button>' +
+                    '<button id="btn-line-notify-' + p.id + '" class="btn ' + bellClass + ' btn-sm shadow-sm px-3 ms-1" style="border-radius: 8px;" onclick="showLineNotifyModal(\'' + p.customer_id + '\', \'PAYMENT_SUCCESS\', \'' + p.amount + '\', \'' + p.receipt_no + '\', \'' + p.id + '\', \'' + (p.receipt_url || '') + '\')" title="แจ้งชำระเงินทาง LINE"><i class="fa-solid fa-bell text-white"></i></button>' +
                 '</td>' +
                 '<td class="pe-4 text-center">' +
                     cancelBtn +

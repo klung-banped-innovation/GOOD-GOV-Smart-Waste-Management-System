@@ -235,10 +235,33 @@
                             <h6>การเชื่อมต่อระบบ (สำหรับนักพัฒนา)</h6>
                         </div>
                         <div class="settings-body">
-                            <div class="mb-0">
+                            <div class="mb-3">
                                 <label class="form-label fw-semibold">Google Apps Script Web App URL (สำหรับอัปโหลดภาพ)</label>
                                 <input type="text" class="form-control" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
                                 <div class="text-muted small mt-1">URL สคริปต์ที่ใช้สำหรับบันทึกภาพลง Google Drive โฟลเดอร์ที่กำหนด</div>
+                            </div>
+                            <hr>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Google Apps Script Web App URL (สำหรับการสำรองข้อมูล)</label>
+                                <input type="text" class="form-control" id="gasBackupUrl" placeholder="https://script.google.com/macros/s/.../exec">
+                                <div class="text-muted small mt-1">URL สคริปต์ที่ใช้สำหรับบันทึกฐานข้อมูลลง Google Drive เป็นไฟล์ .json</div>
+                            </div>
+                            
+                            <div class="d-flex flex-wrap gap-2 mt-4 p-3 bg-light rounded border">
+                                <div class="w-100 mb-2 fw-bold text-dark"><i class="fa-solid fa-database text-primary me-2"></i>จัดการฐานข้อมูล (Backup / Restore)</div>
+                                <button type="button" class="btn btn-outline-primary shadow-sm" onclick="backupDatabaseToDrive()">
+                                    <i class="fa-solid fa-cloud-arrow-up me-2"></i>สำรองข้อมูลไปที่ Google Drive
+                                </button>
+                                
+                                <div class="vr mx-2 d-none d-md-block"></div>
+                                
+                                <div class="d-flex align-items-center flex-grow-1 gap-2">
+                                    <input type="file" class="form-control form-control-sm" id="restoreFile" accept=".json">
+                                    <button type="button" class="btn btn-outline-danger shadow-sm text-nowrap" onclick="restoreDatabase()">
+                                        <i class="fa-solid fa-rotate-left me-2"></i>กู้คืนข้อมูล
+                                    </button>
+                                </div>
+                                <div class="w-100 text-muted small mt-1">*การกู้คืนข้อมูลจะนำข้อมูลจากไฟล์ Backup มาบันทึกทับข้อมูลปัจจุบัน กรุณาตรวจสอบให้แน่ใจก่อนทำการกู้คืน</div>
                             </div>
                         </div>
                     </div>
@@ -255,5 +278,6 @@
 <script src="assets/js/waste.js"></script>
 <script src="assets/js/thai-address.js"></script>
 <script src="assets/js/waste-settings.js"></script>
+<script src="assets/js/waste-backup.js"></script>
 </body>
 </html>
