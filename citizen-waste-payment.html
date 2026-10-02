@@ -298,11 +298,18 @@
                 <div id="qrArea" class="text-center mb-3">
                     <div id="qrContainerToSave" class="d-inline-block p-4 bg-white border rounded-4 shadow-sm position-relative">
                         <div class="fw-bold text-success mb-1" style="font-size: 1.1rem;">สแกนชำระเงิน</div>
-                        <div class="text-muted small mb-3">เทศบาลตำบลสมาร์ทคอนเน็ค</div>
+                        <div class="text-muted small mb-3" id="qrOrgName">เทศบาลตำบลสมาร์ทคอนเน็ค</div>
                         <img id="qrImage" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PromptPay" alt="QR Code" width="180" height="180" style="border-radius:8px;" crossorigin="anonymous">
                         <div class="mt-3 bg-light rounded-3 p-2">
                             <div class="text-muted small">ยอดที่ต้องชำระ</div>
                             <div class="fw-bold text-primary fs-5" id="saveQrTotal">฿0.00</div>
+                        </div>
+                        <div class="mt-2 text-start" style="font-size: 0.75rem; color: #64748b;">
+                            <div>Ref1: <span id="dispRef1">-</span></div>
+                            <div>Ref2: <span id="dispRef2">-</span></div>
+                        </div>
+                        <div class="mt-3 text-center">
+                            <canvas id="barcodeCanvas" style="max-width:100%; height:auto;"></canvas>
                         </div>
                     </div>
                     <div class="mt-3">
@@ -310,6 +317,18 @@
                         <button class="btn btn-outline-success rounded-pill px-4 fw-semibold shadow-sm" onclick="saveQRCodeImage()">
                             <i class="fa-solid fa-download me-2"></i>บันทึกรูป QR Code
                         </button>
+                    </div>
+
+                    <!-- Bank Deep Links -->
+                    <div class="mt-4 pt-3 border-top">
+                        <p class="text-muted small mb-2">หรือเปิดแอปธนาคาร (กรุณาบันทึกรูป QR ก่อน)</p>
+                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                            <a href="kplus://" class="btn text-white fw-bold shadow-sm d-flex align-items-center justify-content-center" style="background:#138f2d; width:50px; height:50px; border-radius:14px; font-size:0.8rem;" title="K PLUS">K+</a>
+                            <a href="scbeasy://" class="btn text-white fw-bold shadow-sm d-flex align-items-center justify-content-center" style="background:#4e2e7f; width:50px; height:50px; border-radius:14px; font-size:0.8rem;" title="SCB EASY">SCB</a>
+                            <a href="ktbnext://" class="btn text-white fw-bold shadow-sm d-flex align-items-center justify-content-center" style="background:#00aeee; width:50px; height:50px; border-radius:14px; font-size:0.8rem;" title="Krungthai NEXT">KTB</a>
+                            <a href="bualuangmbanking://" class="btn text-white fw-bold shadow-sm d-flex align-items-center justify-content-center" style="background:#1e4598; width:50px; height:50px; border-radius:14px; font-size:0.8rem;" title="Bangkok Bank">BBL</a>
+                            <a href="kma://" class="btn text-dark fw-bold shadow-sm d-flex align-items-center justify-content-center" style="background:#fec43b; width:50px; height:50px; border-radius:14px; font-size:0.8rem;" title="Krungsri">BAY</a>
+                        </div>
                     </div>
                 </div>
                 <hr>
@@ -374,6 +393,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="assets/js/supabase-client.js"></script>
     <script src="assets/js/waste.js?v=4"></script>

@@ -737,7 +737,9 @@ function handleImportFile(e) {
             
             // Generate max ID for new entries
             let currentMaxId = existing.reduce((max, c) => {
-                const n = parseInt(c.id.replace('WC',''));
+                let n = 0;
+                if (c.id.startsWith('99')) n = parseInt(c.id.substring(2), 10);
+                else n = parseInt(c.id.replace(/\D/g,''), 10);
                 return (!isNaN(n) && n > max) ? n : max;
             }, 0);
             
@@ -761,7 +763,7 @@ function handleImportFile(e) {
                 } else {
                     if (!id) {
                         currentMaxId++;
-                        id = 'WC' + String(currentMaxId).padStart(3, '0');
+                        id = '99' + String(currentMaxId).padStart(5, '0');
                     }
                     newData.push({
                         id: id,
