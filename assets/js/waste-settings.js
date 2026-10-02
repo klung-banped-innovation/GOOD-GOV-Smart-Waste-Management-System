@@ -25,136 +25,176 @@ async function loadSettings() {
     let settings = null;
 
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-        const { data, error } = await supabaseClient
-            .from('waste_settings')
-            .select('*')
-            .limit(1)
-            .single();
-        
-        if (data) {
-            settings = data;
-        } else if (error && error.code !== 'PGRST116') {
-            // Ignore "Row not found" error
-            console.warn('Supabase fetch error:', error);
+        try {
+            const { data, error } = await supabaseClient
+                .from('waste_settings')
+                .select('*')
+                .limit(1)
+                .single();
+            
+            if (data) {
+                settings = data;
+            } else if (error && error.code !== 'PGRST116') {
+                // Ignore "Row not found" error
+                console.warn('Supabase fetch error:', error);
+            }
+        } catch (e) {
+            console.warn('Supabase exception in loadSettings:', e);
         }
     }
 
     if (!settings) {
-        const local = localStorage.getItem('waste_settings');
-        if (local) settings = JSON.parse(local);
-    }
-
-    if (settings) {
-        currentSettingsId = settings.id;
-        document.getElementById('orgName').value = settings.org_name || '';
-        document.getElementById('orgAddress').value = settings.org_address || '';
-        document.getElementById('orgPhone').value = settings.org_phone || '';
-        document.getElementById('docInvoiceNo').value = settings.doc_invoice_no || '';
-        document.getElementById('mayorName').value = settings.mayor_name || '';
-        document.getElementById('mayorTitle').value = settings.mayor_title || '';
-        document.getElementById('envLicenseNo').value = settings.env_license_no || '';
-        document.getElementById('envPostOffice').value = settings.env_post_office || '';
-        document.getElementById('gasUrl').value = settings.gas_url || '';
-        
-        if (settings.bank_account) document.getElementById('bankAccount').value = settings.bank_account;
-        if (settings.bank_account_name) document.getElementById('bankAccountName').value = settings.bank_account_name;
-        if (settings.bank_name) document.getElementById('bankName').value = settings.bank_name;
-        if (settings.bank_branch) document.getElementById('bankBranch').value = settings.bank_branch;
-        
-        // Load Backup URL from localStorage
-        const gasBackupUrlLocal = localStorage.getItem('waste_gasBackupUrl');
-        if (gasBackupUrlLocal && document.getElementById('gasBackupUrl')) {
-            document.getElementById('gasBackupUrl').value = gasBackupUrlLocal;
-        }
-
-        if (settings.org_logo) {
-            const preview = document.getElementById('orgLogoPreview');
-            preview.src = settings.org_logo;
-            preview.style.display = 'block';
-            
-            const headerLogo = document.getElementById('page-header-logo');
-            const headerIcon = document.getElementById('page-header-icon');
-            if (headerLogo && headerIcon) {
-                headerLogo.src = settings.org_logo;
-                headerLogo.style.display = 'block';
-                headerIcon.style.display = 'none';
+        try {
+            const local = localStorage.getItem('waste_settings');
+            if (local) {
+                try {
+                    settings = JSON.parse(local);
+                } catch (e) {
+                    console.warn('Failed to parse local waste_settings:', e);
+                    settings = null;
+                }
             }
-
-            const cardLogo = document.getElementById('card-header-logo');
-            const cardIcon = document.getElementById('card-header-icon');
-            if (cardLogo && cardIcon) {
-                cardLogo.src = settings.org_logo;
-                cardLogo.style.display = 'block';
-                cardIcon.style.display = 'none';
-            }
-        }
-
-        if (settings.mayor_signature) {
-            const preview = document.getElementById('mayorSignaturePreview');
-            preview.src = settings.mayor_signature;
-            preview.style.display = 'block';
-        }
-
-        if (settings.qr_code_payment) {
-            const preview = document.getElementById('qrCodePromptPayPreview');
-            preview.src = settings.qr_code_payment;
-            preview.style.display = 'block';
-        }
-
-        if (settings.qr_code) {
-            const preview = document.getElementById('qrCodePreview');
-            preview.src = settings.qr_code;
-            preview.style.display = 'block';
+        } catch (e) {
+            console.warn('localStorage access failed:', e);
         }
     }
 
-    // Initialize ThaiAddress
-    if (typeof ThaiAddress !== 'undefined') {
-        await ThaiAddress.loadData();
-        const provSelect = document.getElementById('orgProvince');
-        const distSelect = document.getElementById('orgDistrict');
-        const subSelect = document.getElementById('orgSubdistrict');
-        
-        ThaiAddress.populateProvinces(provSelect);
-
-        provSelect.addEventListener('change', (e) => {
-            if (e.target.value) {
-                distSelect.disabled = false;
-                ThaiAddress.populateDistricts(distSelect, e.target.value);
-                subSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
-                subSelect.disabled = true;
-            } else {
-                distSelect.innerHTML = '<option value="">-- เลือกอำเภอ --</option>';
-                distSelect.disabled = true;
-                subSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
-                subSelect.disabled = true;
-            }
-        });
-
-        distSelect.addEventListener('change', (e) => {
-            if (e.target.value) {
-                subSelect.disabled = false;
-                ThaiAddress.populateSubdistricts(subSelect, e.target.value);
-            } else {
-                subSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
-                subSelect.disabled = true;
-            }
-        });
-
-        // Load saved address
-        if (settings && settings.org_province) {
-            provSelect.value = settings.org_province;
-            provSelect.dispatchEvent(new Event('change'));
+    try {
+        if (settings) {
+            currentSettingsId = settings.id;
+            document.getElementById('orgName').value = settings.org_name || '';
+            document.getElementById('orgAddress').value = settings.org_address || '';
+            document.getElementById('orgPhone').value = settings.org_phone || '';
+            document.getElementById('docInvoiceNo').value = settings.doc_invoice_no || '';
+            document.getElementById('mayorName').value = settings.mayor_name || '';
+            document.getElementById('mayorTitle').value = settings.mayor_title || '';
+            document.getElementById('envLicenseNo').value = settings.env_license_no || '';
+            document.getElementById('envPostOffice').value = settings.env_post_office || '';
+            document.getElementById('gasUrl').value = settings.gas_url || '';
             
-            if (settings.org_district) {
-                distSelect.value = settings.org_district;
-                distSelect.dispatchEvent(new Event('change'));
+            if (settings.bank_account) document.getElementById('bankAccount').value = settings.bank_account;
+            if (settings.bank_account_name) document.getElementById('bankAccountName').value = settings.bank_account_name;
+            if (settings.bank_name) document.getElementById('bankName').value = settings.bank_name;
+            if (settings.bank_branch) document.getElementById('bankBranch').value = settings.bank_branch;
+            if (settings.tax_id && document.getElementById('taxId')) document.getElementById('taxId').value = settings.tax_id;
+            if (settings.branch_suffix && document.getElementById('branchSuffix')) document.getElementById('branchSuffix').value = settings.branch_suffix;
+            if (settings.company_code && document.getElementById('companyCode')) document.getElementById('companyCode').value = settings.company_code;
+            
+            // Load Backup URL from localStorage safely
+            try {
+                const gasBackupUrlLocal = localStorage.getItem('waste_gasBackupUrl');
+                if (gasBackupUrlLocal && document.getElementById('gasBackupUrl')) {
+                    document.getElementById('gasBackupUrl').value = gasBackupUrlLocal;
+                }
+            } catch (e) {
+                console.warn('localStorage access for backup URL failed:', e);
+            }
+
+            if (settings.org_logo) {
+                const preview = document.getElementById('orgLogoPreview');
+                if (preview) {
+                    preview.src = settings.org_logo;
+                    preview.style.display = 'block';
+                }
                 
-                if (settings.org_subdistrict) {
-                    subSelect.value = settings.org_subdistrict;
+                const headerLogo = document.getElementById('page-header-logo');
+                const headerIcon = document.getElementById('page-header-icon');
+                if (headerLogo && headerIcon) {
+                    headerLogo.src = settings.org_logo;
+                    headerLogo.style.display = 'block';
+                    headerIcon.style.display = 'none';
+                }
+
+                const cardLogo = document.getElementById('card-header-logo');
+                const cardIcon = document.getElementById('card-header-icon');
+                if (cardLogo && cardIcon) {
+                    cardLogo.src = settings.org_logo;
+                    cardLogo.style.display = 'block';
+                    cardIcon.style.display = 'none';
+                }
+            }
+
+            if (settings.mayor_signature) {
+                const preview = document.getElementById('mayorSignaturePreview');
+                if (preview) {
+                    preview.src = settings.mayor_signature;
+                    preview.style.display = 'block';
+                }
+            }
+
+            if (settings.qr_code_payment) {
+                const preview = document.getElementById('qrCodePromptPayPreview');
+                if (preview) {
+                    preview.src = settings.qr_code_payment;
+                    preview.style.display = 'block';
+                }
+            }
+
+            if (settings.qr_code) {
+                const preview = document.getElementById('qrCodePreview');
+                if (preview) {
+                    preview.src = settings.qr_code;
+                    preview.style.display = 'block';
                 }
             }
         }
+    } catch (e) {
+        console.error('Error applying settings to UI:', e);
+    }
+
+    try {
+        // Initialize ThaiAddress
+        if (typeof ThaiAddress !== 'undefined') {
+            await ThaiAddress.loadData();
+            const provSelect = document.getElementById('orgProvince');
+            const distSelect = document.getElementById('orgDistrict');
+            const subSelect = document.getElementById('orgSubdistrict');
+            
+            if (provSelect && distSelect && subSelect) {
+                ThaiAddress.populateProvinces(provSelect);
+
+                provSelect.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                        distSelect.disabled = false;
+                        ThaiAddress.populateDistricts(distSelect, e.target.value);
+                        subSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
+                        subSelect.disabled = true;
+                    } else {
+                        distSelect.innerHTML = '<option value="">-- เลือกอำเภอ --</option>';
+                        distSelect.disabled = true;
+                        subSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
+                        subSelect.disabled = true;
+                    }
+                });
+
+                distSelect.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                        subSelect.disabled = false;
+                        ThaiAddress.populateSubdistricts(subSelect, e.target.value);
+                    } else {
+                        subSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
+                        subSelect.disabled = true;
+                    }
+                });
+
+                // Load saved address
+                if (settings && settings.org_province) {
+                    provSelect.value = settings.org_province;
+                    provSelect.dispatchEvent(new Event('change'));
+                    
+                    if (settings.org_district) {
+                        distSelect.value = settings.org_district;
+                        distSelect.dispatchEvent(new Event('change'));
+                        
+                        if (settings.org_subdistrict) {
+                            subSelect.value = settings.org_subdistrict;
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error initializing ThaiAddress:', e);
     }
 }
 
@@ -294,6 +334,9 @@ async function saveSettings() {
             bank_account_name: document.getElementById('bankAccountName').value.trim(),
             bank_name: document.getElementById('bankName').value.trim(),
             bank_branch: document.getElementById('bankBranch').value.trim(),
+            tax_id: document.getElementById('taxId') ? document.getElementById('taxId').value.trim() : null,
+            branch_suffix: document.getElementById('branchSuffix') ? document.getElementById('branchSuffix').value.trim() : null,
+            company_code: document.getElementById('companyCode') ? document.getElementById('companyCode').value.trim() : null,
             org_logo: finalLogo,
             mayor_signature: finalSignature,
             qr_code: finalQrCode,

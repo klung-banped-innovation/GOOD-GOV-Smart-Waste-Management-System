@@ -693,12 +693,52 @@ function goToPayment() {
     // Load Settings
     const settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
 
-    // QR
+    const qrOrgName = document.getElementById('qrOrgName');
+    if (qrOrgName) {
+        qrOrgName.textContent = settings.org_name || 'เทศบาลตำบลสมาร์ทคอนเน็ค';
+    }
+
+    // QR - Dynamic Cross-Bank Bill Payment Barcode
     const qr = document.getElementById('qrImage');
-    if (settings.qr_code_payment) {
-        qr.src = settings.qr_code_payment;
-    } else {
-        qr.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=PromptPay_Amount_${total}`;
+    const taxId = settings.tax_id || settings.company_code || '0000000000000';
+    const suffix = settings.branch_suffix || '00';
+    
+    const ref1 = String(selectedCustomer.id).padStart(18, '0');
+    
+    const now = new Date();
+    const yyyy = String(now.getFullYear()).padStart(4, '0');
+    const MM = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const HHmm = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+    
+    // Use Date.now() last 6 digits as a proxy for queue number to avoid collision
+    const queue = String(Date.now()).slice(-6); 
+    const ref2 = yyyy + MM + dd + HHmm + queue;
+    
+    const amountSatang = (total * 100).toFixed(0);
+    
+    // Thai standard bill payment barcode format (uses \r as separator)
+    const barcodeData = `|${taxId}${suffix}\r${ref1}\r${ref2}\r${amountSatang}`;
+    
+    qr.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(barcodeData)}`;
+
+    const dispRef1 = document.getElementById('dispRef1');
+    if (dispRef1) dispRef1.textContent = ref1;
+    const dispRef2 = document.getElementById('dispRef2');
+    if (dispRef2) dispRef2.textContent = ref2;
+
+    // Render 1D Barcode
+    if (typeof JsBarcode !== 'undefined') {
+        const canvas = document.getElementById('barcodeCanvas');
+        if (canvas) {
+            JsBarcode(canvas, barcodeData, {
+                format: "CODE128",
+                displayValue: false,
+                height: 40,
+                width: 1.5,
+                margin: 5
+            });
+        }
     }
 
     // Bank

@@ -23,11 +23,15 @@ const ThaiAddress = (() => {
         try {
             const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
             if (cached && cached.ts && (Date.now() - cached.ts < 7 * 24 * 3600 * 1000)) {
-                provinces = cached.p;
-                districts = cached.d;
-                subdistricts = cached.s;
-                loaded = true;
-                return true;
+                if (Array.isArray(cached.p) && cached.p.length > 0 && typeof cached.p[0].name_th === 'string') {
+                    if (Array.isArray(cached.d) && Array.isArray(cached.s)) {
+                        provinces = cached.p;
+                        districts = cached.d;
+                        subdistricts = cached.s;
+                        loaded = true;
+                        return true;
+                    }
+                }
             }
         } catch { /* ignore */ }
 
@@ -44,17 +48,20 @@ const ThaiAddress = (() => {
             subdistricts = [];
 
             data.forEach(p => {
-                provinces.push({ id: p.id, name_th: p.name_th });
+                const pNameTh = p.name_th || (p.name && p.name.th) || '';
+                provinces.push({ id: p.id, name_th: pNameTh });
                 
                 if (p.districts) {
                     p.districts.forEach(d => {
-                        districts.push({ id: d.id, name_th: d.name_th, province_id: p.id });
+                        const dNameTh = d.name_th || (d.name && d.name.th) || '';
+                        districts.push({ id: d.id, name_th: dNameTh, province_id: p.id });
                         
                         if (d.sub_districts) {
                             d.sub_districts.forEach(s => {
+                                const sNameTh = s.name_th || (s.name && s.name.th) || '';
                                 subdistricts.push({ 
                                     id: s.id, 
-                                    name_th: s.name_th, 
+                                    name_th: sNameTh, 
                                     amphure_id: d.id, // Keeping amphure_id for backwards compatibility with existing methods
                                     zip_code: s.zip_code 
                                 });

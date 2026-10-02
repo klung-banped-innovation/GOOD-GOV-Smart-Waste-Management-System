@@ -15,36 +15,36 @@ const WASTE_DEFAULT_FEE_TYPES = [
 ];
 
 const WASTE_DEFAULT_CUSTOMERS = [
-    { id:'WC001', house_no:'12/1', moo:'1', name:'นายสมควร ขยัน', id_card:'1100700123456', phone:'081-234-5601', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8820, lng:102.0150, note:'' },
-    { id:'WC002', house_no:'12/2', moo:'1', name:'นางสมหญิง รักสะอาด', id_card:'1100700123457', phone:'081-234-5602', type:'ร้านค้า', fee:120, start_date:'2023-10-01', status:'active', lat:14.8825, lng:102.0155, note:'' },
-    { id:'WC003', house_no:'15/5', moo:'2', name:'บจก. เจริญพาณิชย์', id_card:'0105549000001', phone:'044-256-789', type:'โรงงาน', fee:2500, start_date:'2023-10-01', status:'active', lat:14.8830, lng:102.0160, note:'โรงงานผลิตน้ำดื่ม' },
-    { id:'WC004', house_no:'33/1', moo:'3', name:'นางประนอม ใจบุญ', id_card:'1100700123458', phone:'081-234-5604', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8835, lng:102.0165, note:'' },
-    { id:'WC005', house_no:'45/2', moo:'1', name:'นายชัยวัฒน์ มั่นคง', id_card:'1100700123459', phone:'081-234-5605', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8840, lng:102.0170, note:'' },
-    { id:'WC006', house_no:'50/1', moo:'2', name:'นางวิไลวรรณ งามตา', id_card:'1100700123460', phone:'081-234-5606', type:'บ้านพัก', fee:40, start_date:'2024-01-01', status:'active', lat:14.8845, lng:102.0175, note:'' },
-    { id:'WC007', house_no:'55/3', moo:'1', name:'นายชูชาติ มั่งมี', id_card:'1100700123461', phone:'081-234-5607', type:'ร้านค้า', fee:150, start_date:'2023-10-01', status:'active', lat:14.8850, lng:102.0180, note:'ร้านชำ' },
-    { id:'WC008', house_no:'60/1', moo:'3', name:'นายสมพงษ์ ยินดี', id_card:'1100700123462', phone:'081-234-5608', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8855, lng:102.0185, note:'' },
-    { id:'WC009', house_no:'62/4', moo:'2', name:'นางสุภาพร ดีใจ', id_card:'1100700123463', phone:'081-234-5609', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8860, lng:102.0190, note:'' },
-    { id:'WC010', house_no:'70/2', moo:'1', name:'นายวิชัย เก่งกล้า', id_card:'1100700123464', phone:'081-234-5610', type:'อาคาร', fee:300, start_date:'2023-10-01', status:'active', lat:14.8865, lng:102.0195, note:'อาคารพาณิชย์' },
-    { id:'WC011', house_no:'71/1', moo:'1', name:'นางมาลี สวยงาม', id_card:'1100700123465', phone:'081-234-5611', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8870, lng:102.0200, note:'' },
-    { id:'WC012', house_no:'80/5', moo:'2', name:'นายประสิทธิ์ ทำดี', id_card:'1100700123466', phone:'081-234-5612', type:'บ้านพัก', fee:40, start_date:'2024-04-01', status:'active', lat:14.8875, lng:102.0205, note:'' },
-    { id:'WC013', house_no:'85/1', moo:'3', name:'นางนภา ท้องฟ้า', id_card:'1100700123467', phone:'081-234-5613', type:'ร้านค้า', fee:100, start_date:'2023-10-01', status:'active', lat:14.8880, lng:102.0210, note:'ร้านเสริมสวย' },
-    { id:'WC014', house_no:'90/2', moo:'1', name:'นายสุรชัย อดทน', id_card:'1100700123468', phone:'081-234-5614', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8885, lng:102.0215, note:'' },
-    { id:'WC015', house_no:'95/3', moo:'2', name:'นางจันทร์ สว่าง', id_card:'1100700123469', phone:'081-234-5615', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8890, lng:102.0220, note:'' },
-    { id:'WC016', house_no:'100/1', moo:'3', name:'นายทองดี มีทรัพย์', id_card:'1100700123470', phone:'081-234-5616', type:'ร้านค้า', fee:200, start_date:'2023-10-01', status:'active', lat:14.8895, lng:102.0225, note:'ร้านอาหาร' },
-    { id:'WC017', house_no:'105/2', moo:'1', name:'นางรัตนา สดใส', id_card:'1100700123471', phone:'081-234-5617', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8900, lng:102.0230, note:'' },
-    { id:'WC018', house_no:'110/4', moo:'2', name:'นายวิทยา ปราชญ์', id_card:'1100700123472', phone:'081-234-5618', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8905, lng:102.0235, note:'' },
-    { id:'WC019', house_no:'115/1', moo:'3', name:'นางพิมพ์ บุษบา', id_card:'1100700123473', phone:'081-234-5619', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8910, lng:102.0240, note:'' },
-    { id:'WC020', house_no:'120/3', moo:'1', name:'นายบุญมี โชคดี', id_card:'1100700123474', phone:'081-234-5620', type:'อาคาร', fee:500, start_date:'2023-10-01', status:'active', lat:14.8915, lng:102.0245, note:'หอพัก' },
-    { id:'WC021', house_no:'125/2', moo:'2', name:'นางสายใจ อ่อนหวาน', id_card:'1100700123475', phone:'081-234-5621', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8920, lng:102.0250, note:'' },
-    { id:'WC022', house_no:'130/1', moo:'3', name:'นายสมศักดิ์ รุ่งเรือง', id_card:'1100700123476', phone:'081-234-5622', type:'ร้านค้า', fee:80, start_date:'2023-10-01', status:'active', lat:14.8925, lng:102.0255, note:'ร้านซ่อมรถ' },
-    { id:'WC023', house_no:'135/4', moo:'1', name:'นางอรุณ แจ่มใส', id_card:'1100700123477', phone:'081-234-5623', type:'บ้านพัก', fee:40, start_date:'2024-07-01', status:'active', lat:14.8930, lng:102.0260, note:'' },
-    { id:'WC024', house_no:'140/2', moo:'2', name:'นายอนันต์ ยืนยง', id_card:'1100700123478', phone:'081-234-5624', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8935, lng:102.0265, note:'' },
-    { id:'WC025', house_no:'145/1', moo:'3', name:'นางลำดวน หอมกลิ่น', id_card:'1100700123479', phone:'081-234-5625', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8940, lng:102.0270, note:'' },
-    { id:'WC026', house_no:'150/3', moo:'1', name:'นายกิตติ ชาญชัย', id_card:'1100700123480', phone:'081-234-5626', type:'โรงงาน', fee:1500, start_date:'2023-10-01', status:'active', lat:14.8945, lng:102.0275, note:'โรงสีข้าว' },
-    { id:'WC027', house_no:'155/2', moo:'2', name:'นางเพ็ญ นวล', id_card:'1100700123481', phone:'081-234-5627', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8950, lng:102.0280, note:'' },
-    { id:'WC028', house_no:'160/1', moo:'3', name:'นายสำเริง ขำขัน', id_card:'1100700123482', phone:'081-234-5628', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'cancelled', lat:14.8955, lng:102.0285, note:'ย้ายออก 2025' },
-    { id:'WC029', house_no:'165/4', moo:'1', name:'นางกัลยา ภักดี', id_card:'1100700123483', phone:'081-234-5629', type:'ร้านค้า', fee:100, start_date:'2023-10-01', status:'active', lat:14.8960, lng:102.0290, note:'ร้านขายยา' },
-    { id:'WC030', house_no:'170/2', moo:'2', name:'นายเสรี ปลอดภัย', id_card:'1100700123484', phone:'081-234-5630', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8965, lng:102.0295, note:'' },
+    { id:'9900001', house_no:'12/1', moo:'1', name:'นายสมควร ขยัน', id_card:'1100700123456', phone:'081-234-5601', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8820, lng:102.0150, note:'' },
+    { id:'9900002', house_no:'12/2', moo:'1', name:'นางสมหญิง รักสะอาด', id_card:'1100700123457', phone:'081-234-5602', type:'ร้านค้า', fee:120, start_date:'2023-10-01', status:'active', lat:14.8825, lng:102.0155, note:'' },
+    { id:'9900003', house_no:'15/5', moo:'2', name:'บจก. เจริญพาณิชย์', id_card:'0105549000001', phone:'044-256-789', type:'โรงงาน', fee:2500, start_date:'2023-10-01', status:'active', lat:14.8830, lng:102.0160, note:'โรงงานผลิตน้ำดื่ม' },
+    { id:'9900004', house_no:'33/1', moo:'3', name:'นางประนอม ใจบุญ', id_card:'1100700123458', phone:'081-234-5604', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8835, lng:102.0165, note:'' },
+    { id:'9900005', house_no:'45/2', moo:'1', name:'นายชัยวัฒน์ มั่นคง', id_card:'1100700123459', phone:'081-234-5605', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8840, lng:102.0170, note:'' },
+    { id:'9900006', house_no:'50/1', moo:'2', name:'นางวิไลวรรณ งามตา', id_card:'1100700123460', phone:'081-234-5606', type:'บ้านพัก', fee:40, start_date:'2024-01-01', status:'active', lat:14.8845, lng:102.0175, note:'' },
+    { id:'9900007', house_no:'55/3', moo:'1', name:'นายชูชาติ มั่งมี', id_card:'1100700123461', phone:'081-234-5607', type:'ร้านค้า', fee:150, start_date:'2023-10-01', status:'active', lat:14.8850, lng:102.0180, note:'ร้านชำ' },
+    { id:'9900008', house_no:'60/1', moo:'3', name:'นายสมพงษ์ ยินดี', id_card:'1100700123462', phone:'081-234-5608', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8855, lng:102.0185, note:'' },
+    { id:'9900009', house_no:'62/4', moo:'2', name:'นางสุภาพร ดีใจ', id_card:'1100700123463', phone:'081-234-5609', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8860, lng:102.0190, note:'' },
+    { id:'9900010', house_no:'70/2', moo:'1', name:'นายวิชัย เก่งกล้า', id_card:'1100700123464', phone:'081-234-5610', type:'อาคาร', fee:300, start_date:'2023-10-01', status:'active', lat:14.8865, lng:102.0195, note:'อาคารพาณิชย์' },
+    { id:'9900011', house_no:'71/1', moo:'1', name:'นางมาลี สวยงาม', id_card:'1100700123465', phone:'081-234-5611', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8870, lng:102.0200, note:'' },
+    { id:'9900012', house_no:'80/5', moo:'2', name:'นายประสิทธิ์ ทำดี', id_card:'1100700123466', phone:'081-234-5612', type:'บ้านพัก', fee:40, start_date:'2024-04-01', status:'active', lat:14.8875, lng:102.0205, note:'' },
+    { id:'9900013', house_no:'85/1', moo:'3', name:'นางนภา ท้องฟ้า', id_card:'1100700123467', phone:'081-234-5613', type:'ร้านค้า', fee:100, start_date:'2023-10-01', status:'active', lat:14.8880, lng:102.0210, note:'ร้านเสริมสวย' },
+    { id:'9900014', house_no:'90/2', moo:'1', name:'นายสุรชัย อดทน', id_card:'1100700123468', phone:'081-234-5614', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8885, lng:102.0215, note:'' },
+    { id:'9900015', house_no:'95/3', moo:'2', name:'นางจันทร์ สว่าง', id_card:'1100700123469', phone:'081-234-5615', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8890, lng:102.0220, note:'' },
+    { id:'9900016', house_no:'100/1', moo:'3', name:'นายทองดี มีทรัพย์', id_card:'1100700123470', phone:'081-234-5616', type:'ร้านค้า', fee:200, start_date:'2023-10-01', status:'active', lat:14.8895, lng:102.0225, note:'ร้านอาหาร' },
+    { id:'9900017', house_no:'105/2', moo:'1', name:'นางรัตนา สดใส', id_card:'1100700123471', phone:'081-234-5617', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8900, lng:102.0230, note:'' },
+    { id:'9900018', house_no:'110/4', moo:'2', name:'นายวิทยา ปราชญ์', id_card:'1100700123472', phone:'081-234-5618', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8905, lng:102.0235, note:'' },
+    { id:'9900019', house_no:'115/1', moo:'3', name:'นางพิมพ์ บุษบา', id_card:'1100700123473', phone:'081-234-5619', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8910, lng:102.0240, note:'' },
+    { id:'9900020', house_no:'120/3', moo:'1', name:'นายบุญมี โชคดี', id_card:'1100700123474', phone:'081-234-5620', type:'อาคาร', fee:500, start_date:'2023-10-01', status:'active', lat:14.8915, lng:102.0245, note:'หอพัก' },
+    { id:'9900021', house_no:'125/2', moo:'2', name:'นางสายใจ อ่อนหวาน', id_card:'1100700123475', phone:'081-234-5621', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8920, lng:102.0250, note:'' },
+    { id:'9900022', house_no:'130/1', moo:'3', name:'นายสมศักดิ์ รุ่งเรือง', id_card:'1100700123476', phone:'081-234-5622', type:'ร้านค้า', fee:80, start_date:'2023-10-01', status:'active', lat:14.8925, lng:102.0255, note:'ร้านซ่อมรถ' },
+    { id:'9900023', house_no:'135/4', moo:'1', name:'นางอรุณ แจ่มใส', id_card:'1100700123477', phone:'081-234-5623', type:'บ้านพัก', fee:40, start_date:'2024-07-01', status:'active', lat:14.8930, lng:102.0260, note:'' },
+    { id:'9900024', house_no:'140/2', moo:'2', name:'นายอนันต์ ยืนยง', id_card:'1100700123478', phone:'081-234-5624', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8935, lng:102.0265, note:'' },
+    { id:'9900025', house_no:'145/1', moo:'3', name:'นางลำดวน หอมกลิ่น', id_card:'1100700123479', phone:'081-234-5625', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8940, lng:102.0270, note:'' },
+    { id:'9900026', house_no:'150/3', moo:'1', name:'นายกิตติ ชาญชัย', id_card:'1100700123480', phone:'081-234-5626', type:'โรงงาน', fee:1500, start_date:'2023-10-01', status:'active', lat:14.8945, lng:102.0275, note:'โรงสีข้าว' },
+    { id:'9900027', house_no:'155/2', moo:'2', name:'นางเพ็ญ นวล', id_card:'1100700123481', phone:'081-234-5627', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8950, lng:102.0280, note:'' },
+    { id:'9900028', house_no:'160/1', moo:'3', name:'นายสำเริง ขำขัน', id_card:'1100700123482', phone:'081-234-5628', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'cancelled', lat:14.8955, lng:102.0285, note:'ย้ายออก 2025' },
+    { id:'9900029', house_no:'165/4', moo:'1', name:'นางกัลยา ภักดี', id_card:'1100700123483', phone:'081-234-5629', type:'ร้านค้า', fee:100, start_date:'2023-10-01', status:'active', lat:14.8960, lng:102.0290, note:'ร้านขายยา' },
+    { id:'9900030', house_no:'170/2', moo:'2', name:'นายเสรี ปลอดภัย', id_card:'1100700123484', phone:'081-234-5630', type:'บ้านพัก', fee:40, start_date:'2023-10-01', status:'active', lat:14.8965, lng:102.0295, note:'' },
 ];
 
 const WASTE_MONTHS = ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.'];
@@ -118,11 +118,11 @@ function generateDefaultMonthlyStatus() {
         });
         
         // Some customers fully paid for 2568
-        if (['WC001','WC004','WC005','WC008','WC011','WC014','WC017'].includes(c.id)) {
+        if (['9900001','9900004','9900005','9900008','9900011','9900014','9900017'].includes(c.id)) {
             WASTE_MONTH_KEYS.forEach(mk => statuses[c.id]['2568'][mk] = 'paid');
         }
         // Some have pending
-        if (['WC003','WC010'].includes(c.id)) { statuses[c.id]['2568']['apr'] = 'pending'; }
+        if (['9900003','9900010'].includes(c.id)) { statuses[c.id]['2568']['apr'] = 'pending'; }
     });
     return statuses;
 }
@@ -164,9 +164,9 @@ const WASTE_DEFAULT_REGISTER_REQUESTS = [
 ];
 
 const WASTE_DEFAULT_CANCEL_REQUESTS = [
-    { id:'CAN001', customer_id:'WC028', name:'นายสำเริง ขำขัน', house_no:'160/1 ม.3', reason:'ย้ายออก', date:'2025-09-15', status:'approved', note:'' },
-    { id:'CAN002', customer_id:'WC015', name:'นางจันทร์ สว่าง', house_no:'95/3 ม.2', reason:'ไม่มีผู้อยู่อาศัย', date:'2026-04-10', status:'pending', note:'' },
-    { id:'CAN003', customer_id:'WC018', name:'นายวิทยา ปราชญ์', house_no:'110/4 ม.2', reason:'รื้อถอนอาคาร', date:'2026-04-28', status:'pending', note:'' },
+    { id:'CAN001', customer_id:'9900028', name:'นายสำเริง ขำขัน', house_no:'160/1 ม.3', reason:'ย้ายออก', date:'2025-09-15', status:'approved', note:'' },
+    { id:'CAN002', customer_id:'9900015', name:'นางจันทร์ สว่าง', house_no:'95/3 ม.2', reason:'ไม่มีผู้อยู่อาศัย', date:'2026-04-10', status:'pending', note:'' },
+    { id:'CAN003', customer_id:'9900018', name:'นายวิทยา ปราชญ์', house_no:'110/4 ม.2', reason:'รื้อถอนอาคาร', date:'2026-04-28', status:'pending', note:'' },
 ];
 
 // ============================================
@@ -1125,10 +1125,12 @@ async function generateReceiptNumberAsync() {
 function generateCustomerId() {
     const customers = getWasteCustomers();
     const maxNum = customers.reduce((max, c) => {
-        const n = parseInt(c.id.replace('WC',''));
-        return n > max ? n : max;
+        let n = 0;
+        if (c.id.startsWith('99')) n = parseInt(c.id.substring(2), 10);
+        else n = parseInt(c.id.replace(/\D/g, ''), 10);
+        return (!isNaN(n) && n > max) ? n : max;
     }, 0);
-    return 'WC' + String(maxNum + 1).padStart(3, '0');
+    return '99' + String(maxNum + 1).padStart(5, '0');
 }
 
 function getCurrentFiscalYear() {
