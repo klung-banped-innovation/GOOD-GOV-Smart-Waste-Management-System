@@ -136,6 +136,19 @@ async function loadSettings() {
                     preview.src = settings.qr_code;
                     preview.style.display = 'block';
                 }
+                const actions = document.getElementById('qrCodeActions');
+                if (actions) actions.style.display = 'block';
+            }
+
+            const portalUrlInput = document.getElementById('citizenPortalUrl');
+            if (portalUrlInput) {
+                const savedUrl = settings.citizen_portal_url || localStorage.getItem('waste_citizen_portal_url') || '';
+                if (savedUrl) {
+                    portalUrlInput.value = savedUrl;
+                } else {
+                    const baseHref = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+                    portalUrlInput.value = baseHref + 'citizen-waste.html';
+                }
             }
         }
     } catch (e) {
@@ -230,9 +243,77 @@ function previewImage(input, previewId) {
             qrCodePromptPayBase64 = base64;
         } else if (previewId === 'qrCodePreview') {
             qrCodeBase64 = base64;
+            const actions = document.getElementById('qrCodeActions');
+            if (actions) actions.style.display = 'block';
         }
     };
     reader.readAsDataURL(file);
+}
+
+function fillDefaultCitizenPortalUrl() {
+    const baseHref = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+    const defaultUrl = baseHref + 'citizen-waste.html';
+    const input = document.getElementById('citizenPortalUrl');
+    if (input) {
+        input.value = defaultUrl;
+    }
+    generateCitizenPortalQR();
+}
+
+function generateCitizenPortalQR() {
+    const input = document.getElementById('citizenPortalUrl');
+    const url = input ? input.value.trim() : '';
+    if (!url) {
+        Swal.fire('กรุณาระบุลิงก์', 'กรุณาใส่ลิงก์ระบบบริการประชาชนก่อนกด Generate QR Code', 'warning');
+        return;
+    }
+
+    try {
+        let dataUrl = '';
+        if (typeof qrcode === 'function') {
+            const qr = qrcode(0, 'M');
+            qr.addData(url);
+            qr.make();
+            dataUrl = qr.createDataURL(8, 4);
+        } else {
+            dataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
+        }
+
+        const preview = document.getElementById('qrCodePreview');
+        if (preview) {
+            preview.src = dataUrl;
+            preview.style.display = 'block';
+        }
+        const actions = document.getElementById('qrCodeActions');
+        if (actions) {
+            actions.style.display = 'block';
+        }
+
+        qrCodeBase64 = dataUrl;
+        localStorage.setItem('waste_citizen_portal_url', url);
+
+        Swal.fire({
+            icon: 'success',
+            title: 'สร้าง QR Code สำเร็จ',
+            text: 'อย่าลืมกดปุ่ม "บันทึกการตั้งค่า" ด้านบนเพื่อบันทึกลงระบบ',
+            timer: 1800,
+            showConfirmButton: false
+        });
+    } catch (err) {
+        console.error('QR Generate error:', err);
+        Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถสร้าง QR Code จากลิงก์นี้ได้', 'error');
+    }
+}
+
+function downloadCitizenPortalQR() {
+    const preview = document.getElementById('qrCodePreview');
+    if (!preview || !preview.src) return;
+    const a = document.createElement('a');
+    a.href = preview.src;
+    a.download = 'QRCode_ระบบบริการประชาชน.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
 async function uploadToGas(base64, filename, gasUrl) {
@@ -273,6 +354,11 @@ async function saveSettings() {
         const gasBackupUrl = document.getElementById('gasBackupUrl') ? document.getElementById('gasBackupUrl').value.trim() : '';
         if (gasBackupUrl !== undefined) {
             localStorage.setItem('waste_gasBackupUrl', gasBackupUrl);
+        }
+
+        const citizenPortalUrlVal = document.getElementById('citizenPortalUrl') ? document.getElementById('citizenPortalUrl').value.trim() : '';
+        if (citizenPortalUrlVal) {
+            localStorage.setItem('waste_citizen_portal_url', citizenPortalUrlVal);
         }
 
         // 1. Upload new images if any
@@ -363,12 +449,15 @@ async function saveSettings() {
         const localPayload = { ...payload };
         localPayload.org_province_name = provName && provName !== '-- เลือกจังหวัด --' ? provName : null;
         localPayload.org_district_name = distName && distName !== '-- เลือกอำเภอ --' ? distName : null;
+        localPayload.citizen_portal_url = citizenPortalUrlVal || null;
         
         localStorage.setItem('waste_settings', JSON.stringify({id: currentSettingsId, ...localPayload}));
 
         // Reset the tracking vars
         orgLogoBase64 = null;
         mayorSignatureBase64 = null;
+        qrCodeBase64 = null;
+        qrCodePromptPayBase64 = null;
 
         Swal.fire({
             icon: 'success',

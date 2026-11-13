@@ -4,10 +4,56 @@
 let selectedCustomersToLink = [];
 let searchTimeout = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await ensureConfiguredSubdistrict();
     loadLinkedCustomers();
     populateSearchMooDropdown();
 });
+
+async function ensureConfiguredSubdistrict() {
+    if (window.orgSubdistrictName) return window.orgSubdistrictName;
+    try {
+        const local = localStorage.getItem('waste_settings');
+        if (local) {
+            const parsed = JSON.parse(local);
+            if (parsed && parsed.org_subdistrict_name) {
+                window.orgSubdistrictName = String(parsed.org_subdistrict_name).trim();
+            }
+        }
+    } catch (e) {}
+
+    if (!window.orgSubdistrictName && typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const { data } = await supabaseClient
+                .from('waste_settings')
+                .select('org_subdistrict_name')
+                .limit(1)
+                .single();
+            if (data && data.org_subdistrict_name) {
+                window.orgSubdistrictName = String(data.org_subdistrict_name).trim();
+            }
+        } catch (e) {}
+    }
+    return window.orgSubdistrictName || 'บ้านเป็ด';
+}
+
+function getConfiguredSubdistrictText() {
+    let sub = (window.orgSubdistrictName || '').trim();
+    if (!sub) {
+        try {
+            const local = localStorage.getItem('waste_settings');
+            if (local) {
+                const parsed = JSON.parse(local);
+                if (parsed && parsed.org_subdistrict_name) {
+                    sub = String(parsed.org_subdistrict_name).trim();
+                }
+            }
+        } catch (e) {}
+    }
+    if (!sub) sub = 'บ้านเป็ด';
+    if (sub.startsWith('ต.') || sub.startsWith('ตำบล')) return sub;
+    return `ต.${sub}`;
+}
 
 function populateSearchMooDropdown() {
     const mooSelect = document.getElementById('searchMoo');
@@ -30,6 +76,9 @@ async function loadLinkedCustomers() {
         listContainer.innerHTML = '<div class="text-center text-danger">กรุณาเข้าสู่ระบบใหม่</div>';
         return;
     }
+
+    await ensureConfiguredSubdistrict();
+    const subdistrictText = getConfiguredSubdistrictText();
 
     try {
         const { data, error } = await supabaseClient
@@ -67,7 +116,7 @@ async function loadLinkedCustomers() {
                 <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded bg-white shadow-sm">
                     <div>
                         <div class="fw-bold text-dark" style="font-size: 0.95rem;">${c.name}</div>
-                        <div class="text-muted" style="font-size: 0.85rem;"><i class="fa-solid fa-location-dot me-1"></i>บ้านเลขที่ ${c.house_no} ม.${c.moo || '-'} ${c.subdistrict || ''}</div>
+                        <div class="text-muted" style="font-size: 0.85rem;"><i class="fa-solid fa-location-dot me-1"></i>บ้านเลขที่ ${c.house_no} ม.${c.moo || '-'} ${subdistrictText}</div>
                     </div>
                     <button class="btn btn-sm btn-outline-danger rounded-pill" onclick="unlinkCustomer('${link.id}', '${c.name}')" title="ยกเลิกเชื่อมโยง">
                         <i class="fa-solid fa-unlink"></i>
@@ -142,6 +191,7 @@ async function searchCustomersForLinking(mode) {
     resultDiv.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-success spinner-border-sm"></div> ค้นหา...</div>';
 
     try {
+        await ensureConfiguredSubdistrict();
         const { data, error } = await query.limit(10);
             
         if (error) throw error;
@@ -167,6 +217,7 @@ function searchByNameInstant() {
 
 function renderSearchResults(data) {
     const resultDiv = document.getElementById('linkCustomerSearchResults');
+    const subdistrictText = getConfiguredSubdistrictText();
     let html = '<div class="list-group list-group-flush">';
     
     data.forEach(c => {
@@ -179,7 +230,7 @@ function renderSearchResults(data) {
             <div class="list-group-item d-flex justify-content-between align-items-center px-2 py-3">
                 <div>
                     <div class="fw-bold text-dark">${c.name} <span class="badge bg-light text-dark ms-1 border">${c.id}</span></div>
-                    <div class="text-muted text-sm"><i class="fa-solid fa-house-chimney me-1"></i>บ้านเลขที่ ${c.house_no} ม.${c.moo || '-'} ${c.subdistrict || ''}</div>
+                    <div class="text-muted text-sm"><i class="fa-solid fa-house-chimney me-1"></i>บ้านเลขที่ ${c.house_no} ม.${c.moo || '-'} ${subdistrictText}</div>
                 </div>
                 <button class="btn btn-sm ${btnClass} rounded-pill px-3" id="btn-select-${c.id}" onclick="toggleSelection(${cJson})">${btnText}</button>
             </div>
@@ -216,6 +267,7 @@ function renderSelectedBasket() {
     const basket = document.getElementById('selectedCustomersBasket');
     const badge = document.getElementById('selectedCountBadge');
     const confirmBtn = document.getElementById('confirmLinkBtn');
+    const subdistrictText = getConfiguredSubdistrictText();
     
     badge.innerText = selectedCustomersToLink.length;
     confirmBtn.disabled = selectedCustomersToLink.length === 0;
@@ -231,7 +283,7 @@ function renderSelectedBasket() {
             <div class="d-flex justify-content-between align-items-center mb-2 bg-white p-2 rounded border">
                 <div>
                     <div class="fw-bold text-success text-sm">${c.name}</div>
-                    <div class="text-muted" style="font-size:0.75rem;">บ้านเลขที่ ${c.house_no} ม.${c.moo || '-'}</div>
+                    <div class="text-muted" style="font-size:0.75rem;">บ้านเลขที่ ${c.house_no} ม.${c.moo || '-'} ${subdistrictText}</div>
                 </div>
                 <button class="btn btn-sm text-danger p-1" onclick='toggleSelection(${JSON.stringify(c).replace(/"/g, '&quot;')})'><i class="fa-solid fa-times"></i></button>
             </div>
