@@ -35,6 +35,7 @@ const NAV_ITEMS = [
     { href: 'waste-payments.html', icon: 'fa-solid fa-hand-holding-dollar', label: 'รับชำระเงิน', key: 'waste-payments', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-reports.html', icon: 'fa-solid fa-chart-bar', label: 'รายงานรายรับ', key: 'waste-reports', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-kor3.html?v=1781176854926', icon: 'fa-solid fa-table-cells', label: 'กค.3 รายเดือน', key: 'waste-kor3', depts: ['กองคลัง'], parent: 'waste-dashboard' },
+    { href: 'waste-invoices.html', icon: 'fa-solid fa-file-invoice', label: 'ใบแจ้งหนี้ค่าขยะ', key: 'waste-invoices', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-debtors.html', icon: 'fa-solid fa-user-clock', label: 'ลูกหนี้ค้างชำระ', key: 'waste-debtors', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-map.html', icon: 'fa-solid fa-map-location-dot', label: 'แผนที่ลูกค้า', key: 'waste-map', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-staff.html', icon: 'fa-solid fa-users-gear', label: 'เจ้าหน้าที่รับชำระ', key: 'waste-staff', depts: ['กองคลัง'], parent: 'waste-dashboard' },
