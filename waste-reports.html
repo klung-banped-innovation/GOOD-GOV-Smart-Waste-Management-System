@@ -26,7 +26,10 @@
                     <li class="breadcrumb-item active">รายงานรายรับ</li>
                 </ol></nav>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-primary fw-semibold shadow-sm" onclick="openKtbImportTab()">
+                    <i class="fa-solid fa-building-columns me-1"></i>นำเข้ารายรับประจำวัน KTB-Corporate (ตัดยอดอัตโนมัติ)
+                </button>
                 <button class="btn btn-sm btn-outline-success" onclick="exportCurrentTabExcel()"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
                 <button class="btn btn-sm btn-outline-danger" onclick="exportCurrentTabPDF()"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
             </div>
@@ -39,6 +42,11 @@
             <li class="nav-item"><a class="nav-link fw-semibold" data-bs-toggle="tab" href="#tabMonthly">รายเดือน</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold" data-bs-toggle="tab" href="#tabYearly">รายปี</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold" data-bs-toggle="tab" href="#tabExempt">รายการยกเว้นค่าธรรมเนียม</a></li>
+            <li class="nav-item">
+                <a class="nav-link fw-semibold text-primary" data-bs-toggle="tab" href="#tabKtbImport" id="tabKtbImportLink" onclick="initKtbImportUI()">
+                    <i class="fa-solid fa-file-import me-1"></i>นำเข้ารายรับประจำวัน (KTB-Corporate)
+                </a>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -90,7 +98,10 @@
             <div class="tab-pane fade" id="tabDaily">
                 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                     <h5 class="fw-bold mb-0">สรุปรายวัน</h5>
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-outline-primary fw-semibold" onclick="openKtbImportTab()">
+                            <i class="fa-solid fa-file-excel me-1"></i>นำเข้าไฟล์ KTB-Corporate
+                        </button>
                         <label class="form-label mb-0 text-muted" style="white-space: nowrap;">เลือกวันที่:</label>
                         <input type="date" id="filterDate" class="form-control form-control-sm" style="width: 150px;" onchange="renderReports()">
                         <button class="btn btn-sm btn-danger" onclick="exportDailyPDF()" title="พิมพ์ PDF รายวัน"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
@@ -160,6 +171,134 @@
                     </table>
                 </div></div></div>
             </div>
+
+            <!-- KTB Corporate Online Daily Revenue Import & Auto Cutoff -->
+            <div class="tab-pane fade" id="tabKtbImport">
+                <div class="card border-0 shadow-sm mb-4" style="border-top: 4px solid #0ea5e9 !important;">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+                            <div>
+                                <h5 class="fw-bold text-primary mb-1">
+                                    <i class="fa-solid fa-building-columns me-2"></i>นำเข้ารายรับประจำวันผ่านไฟล์ Excel กรุงไทย (KTB-Corporate) และตัดยอดอัตโนมัติ
+                                </h5>
+                                <div class="text-muted text-sm">
+                                    อัปโหลดไฟล์รายงานการรับชำระเงิน (Bill Payment / Comcode) จากระบบ <b>KTB Corporate Online</b> ระบบจะอ่านรหัสลูกค้าจาก <code>Ref1</code> / <code>Ref2</code> ออกใบเสร็จรับเงิน และตัดยอดเดือนที่ค้างชำระใน กค.3 และใบแจ้งหนี้ให้อัตโนมัติ
+                                </div>
+                            </div>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary fw-semibold" onclick="downloadKtbSampleTemplate()">
+                                    <i class="fa-solid fa-download me-1"></i>ดาวน์โหลดไฟล์ตัวอย่าง KTB-Corporate (.xlsx)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 align-items-end bg-light p-3 rounded-3 border mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label text-xs fw-bold text-muted mb-1">ปีงบประมาณที่ตัดยอดหลัก</label>
+                                <select id="ktbImportFiscalYear" class="form-select form-select-sm" onchange="reanalyzeKtbWorksheet()"></select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-xs fw-bold text-muted mb-1">รูปแบบการตัดเดือน</label>
+                                <select id="ktbImportMonthMode" class="form-select form-select-sm" onchange="reanalyzeKtbWorksheet()">
+                                    <option value="auto" selected>ตัดเรียงจากเดือนที่ค้างเก่าสุดอัตโนมัติ (FIFO)</option>
+                                    <option value="oct">เริ่มตัดจาก ตุลาคม</option>
+                                    <option value="nov">เริ่มตัดจาก พฤศจิกายน</option>
+                                    <option value="dec">เริ่มตัดจาก ธันวาคม</option>
+                                    <option value="jan">เริ่มตัดจาก มกราคม</option>
+                                    <option value="feb">เริ่มตัดจาก กุมภาพันธ์</option>
+                                    <option value="mar">เริ่มตัดจาก มีนาคม</option>
+                                    <option value="apr">เริ่มตัดจาก เมษายน</option>
+                                    <option value="may">เริ่มตัดจาก พฤษภาคม</option>
+                                    <option value="jun">เริ่มตัดจาก มิถุนายน</option>
+                                    <option value="jul">เริ่มตัดจาก กรกฎาคม</option>
+                                    <option value="aug">เริ่มตัดจาก สิงหาคม</option>
+                                    <option value="sep">เริ่มตัดจาก กันยายน</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label text-xs fw-bold text-muted mb-1">วันที่รับชำระ (กรณีไฟล์ไม่ระบุ)</label>
+                                <input type="date" id="ktbDefaultDate" class="form-control form-control-sm" onchange="reanalyzeKtbWorksheet()">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label text-xs fw-bold text-muted mb-1">ช่องทางชำระในใบเสร็จ</label>
+                                <input type="text" id="ktbImportMethod" class="form-control form-control-sm" value="โอน/KTB Corporate">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label text-xs fw-bold text-muted mb-1">ชื่อเจ้าหน้าที่ผู้นำเข้า</label>
+                                <input type="text" id="ktbImportStaff" class="form-control form-control-sm" placeholder="ชื่อเจ้าหน้าที่">
+                            </div>
+                        </div>
+
+                        <!-- Dropzone เลือกไฟล์ KTB -->
+                        <div class="p-4 text-center rounded-3 border border-2 border-primary border-opacity-50 bg-primary bg-opacity-10 mb-3"
+                             style="border-style: dashed !important; cursor: pointer;"
+                             onclick="document.getElementById('ktbExcelFileInput').click()">
+                            <input type="file" id="ktbExcelFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleKtbExcelFile(event)">
+                            <i class="fa-solid fa-file-excel text-primary fs-1 mb-2"></i>
+                            <div class="fw-bold text-dark">คลิกเพื่อเลือกไฟล์ Excel จากระบบกรุงไทย KTB-Corporate (.xlsx, .xls, .csv)</div>
+                            <div class="text-xs text-muted mt-1" id="ktbFileNameLabel">รองรับไฟล์รายงานรับชำระเงิน Bill Payment / QR Cross-Bank ที่มีคอลัมน์ Ref1, Ref2 และจำนวนเงิน</div>
+                        </div>
+
+                        <!-- สรุปผลการวิเคราะห์ไฟล์ -->
+                        <div class="row g-3 mb-3" id="ktbPreviewSummary" style="display: none;"></div>
+
+                        <!-- ปุ่มยืนยันตัดยอด -->
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                            <div class="fw-bold text-sm"><i class="fa-solid fa-list-check text-primary me-1"></i>รายการตรวจสอบก่อนตัดยอดอัตโนมัติ</div>
+                            <button class="btn btn-success fw-bold px-4 shadow-sm" id="btnConfirmKtbImport" disabled onclick="executeKtbAutoCutoffImport()">
+                                <i class="fa-solid fa-bolt me-1"></i>ยืนยันนำเข้าและตัดยอดอัตโนมัติ
+                            </button>
+                        </div>
+
+                        <div class="table-responsive border rounded-3" style="max-height: 460px; overflow-y: auto;">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
+                                    <tr>
+                                        <th class="text-center" style="width: 42px;">
+                                            <input type="checkbox" class="form-check-input" checked onchange="toggleAllKtbRows(this.checked)" title="เลือกทั้งหมด">
+                                        </th>
+                                        <th style="width: 50px;">ลำดับ</th>
+                                        <th>วันที่/เวลาชำระ</th>
+                                        <th>ข้อมูล KTB (Ref1 / Ref2)</th>
+                                        <th>ข้อมูลลูกค้าที่จับคู่ได้</th>
+                                        <th>เดือนที่จะตัดยอดอัตโนมัติ</th>
+                                        <th class="text-end">จำนวนเงิน</th>
+                                        <th class="text-center">สถานะ</th>
+                                        <th class="text-center">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ktbPreviewTableBody">
+                                    <tr><td colspan="9" class="text-center py-4 text-muted">กรุณาเลือกไฟล์ Excel KTB-Corporate เพื่อตรวจสอบและตัดยอดอัตโนมัติ</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ประวัติการนำเข้าไฟล์ KTB Corporate -->
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white py-3 border-bottom">
+                        <h6 class="fw-bold mb-0"><i class="fa-solid fa-clock-rotate-left text-secondary me-2"></i>ประวัติการนำเข้าและตัดยอดผ่าน KTB-Corporate ล่าสุด</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">วัน-เวลาที่นำเข้า</th>
+                                        <th>ชื่อไฟล์ KTB</th>
+                                        <th class="text-center">จำนวนที่ตัดยอด</th>
+                                        <th class="text-end">ยอดเงินรวม</th>
+                                        <th>ผู้นำเข้า</th>
+                                        <th class="text-center pe-3">สถานะ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ktbHistoryTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -175,6 +314,7 @@
 <script src="assets/js/waste-reports-pdf.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="assets/js/waste-reports-excel.js"></script>
+<script src="assets/js/waste-ktb-import.js?v=20261113_1"></script>
 <script>
 var monthlyChartInstance = null;
 var yearlyChartInstance = null;
@@ -238,6 +378,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // 2. Re-render once fresh data arrives
         renderReports();
+        if (typeof initKtbImportUI === 'function') initKtbImportUI();
         
         Swal.close();
     } catch (e) {

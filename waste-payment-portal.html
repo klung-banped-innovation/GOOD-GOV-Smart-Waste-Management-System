@@ -724,10 +724,10 @@
                             } catch(e) {}
                         }
                     }
-                    if (!TARGET_SUBDISTRICT) TARGET_SUBDISTRICT = 'เหมืองหม้อ';
+                    if (!TARGET_SUBDISTRICT) TARGET_SUBDISTRICT = 'บ้านเป็ด';
                     
-                    const normalizedSubdistrict = sSubdistrict.trim();
-                    const normalizedTarget = TARGET_SUBDISTRICT.trim();
+                    const normalizedSubdistrict = sSubdistrict.replace(/^ต\.|^ตำบล/g, '').trim();
+                    const normalizedTarget = TARGET_SUBDISTRICT.replace(/^ต\.|^ตำบล/g, '').trim();
 
                     if (normalizedSubdistrict && normalizedSubdistrict !== normalizedTarget) {
                         // User is out of district
@@ -751,13 +751,12 @@
                         let customer = null;
                         
                         // 1. Try Address Match
-                        if (sHouseNo && sMoo && sSubdistrict) {
+                        if (sHouseNo && sMoo) {
                             const { data: addressMatch } = await supabaseClient
                                 .from('waste_customers')
                                 .select('*')
                                 .eq('house_no', sHouseNo)
                                 .eq('moo', sMoo)
-                                .eq('subdistrict', sSubdistrict)
                                 .limit(1);
                                 
                             if (addressMatch && addressMatch.length > 0) {
@@ -782,7 +781,8 @@
                         if (customer) {
                             const heroAddressEl = document.getElementById('heroCustomerAddress');
                             if (heroAddressEl) {
-                                heroAddressEl.innerHTML = `บ้านเลขที่ ${customer.house_no} หมู่ ${customer.moo || '-'} ต.${customer.subdistrict || ''}`;
+                                const dispSub = normalizedTarget ? `ต.${normalizedTarget}` : (customer.subdistrict || '');
+                                heroAddressEl.innerHTML = `บ้านเลขที่ ${customer.house_no} หมู่ ${customer.moo || '-'} ${dispSub}`;
                             }
                             
                             // Calculate debt for current fiscal year
