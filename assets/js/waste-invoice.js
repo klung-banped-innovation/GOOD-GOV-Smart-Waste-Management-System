@@ -99,101 +99,174 @@ function formatThaiFullDate(dateStr) {
 }
 
 /**
- * คำนวณข้อมูลใบแจ้งหนี้ของลูกค้ารายบุคคลตามปีงบประมาณและเดือนที่เลือก
+ * คำนวณข้อมูลใบแจ้งหนี้ของลูกค้ารายบุคคล รองรับทั้งปีเดียวและหลายปีงบประมาณ (ย้อนหลัง / ปัจจุบัน / ล่วงหน้า)
+ * รวมถึงการเลือกช่วงเดือนและช่วงปี
  */
-function calculateCustomerInvoiceData(customer, fiscalYear, targetMonthKey, calcMode = 'single') {
+function calculateCustomerInvoiceData(customer, fiscalYearOrOpts, targetMonthKey = 'oct', calcMode = 'single') {
     const ms = typeof getMonthlyStatus === 'function' ? getMonthlyStatus() : {};
-    const customerYearStatus = (ms[customer.id] || {})[fiscalYear] || {};
-    const targetIdx = INV_MONTH_KEYS.indexOf(targetMonthKey);
-    const fyNum = parseInt(fiscalYear, 10) || 2568;
+    const customerAllStatus = ms[customer.id] || {};
 
-    // ประวัติการค้างชำระในตารางฝั่งขวา (12 เดือนของปีงบประมาณ)
-    const monthlyUnpaidAmounts = {};
-    const monthlyStatuses = {};
-    let cumulativeAmount = 0;
-    let singleMonthAmount = 0;
-    let allYearUnpaidAmount = 0;
-    let unpaidMonthsList = [];
+    let startFY, endFY, startMonthKey, endMonthKey, mode;
 
-    INV_MONTH_KEYS.forEach((mk, idx) => {
-        const status = customerYearStatus[mk] || 'unpaid';
-        monthlyStatuses[mk] = status;
-        const fee = typeof getFeeForMonth === 'function' ? Number(getFeeForMonth(customer.id, mk, fiscalYear)) : Number(customer.fee || 0);
-        const isUnpaid = (status !== 'paid' && status !== 'exempted');
-
-        if (idx === targetIdx) {
-            singleMonthAmount = (status === 'paid' || status === 'exempted') ? 0 : fee;
+    if (typeof fiscalYearOrOpts === 'object' && fiscalYearOrOpts !== null) {
+        startFY = parseInt(fiscalYearOrOpts.startFiscalYear || fiscalYearOrOpts.fiscalYear || 2568, 10);
+        endFY = parseInt(fiscalYearOrOpts.endFiscalYear || fiscalYearOrOpts.fiscalYear || startFY, 10);
+        if (startFY > endFY) {
+            const tmp = startFY;
+            startFY = endFY;
+            endFY = tmp;
         }
-
-        if (status === 'paid') {
-            monthlyUnpaidAmounts[mk] = 'paid';
-        } else if (isUnpaid && fee > 0) {
-            allYearUnpaidAmount += fee;
-            if (idx <= targetIdx) {
-                cumulativeAmount += fee;
-            }
-
-            if (calcMode === 'single') {
-                if (idx === targetIdx) {
-                    monthlyUnpaidAmounts[mk] = fee;
-                    unpaidMonthsList.push(INV_MONTH_SHORT[idx]);
-                } else {
-                    monthlyUnpaidAmounts[mk] = null;
-                }
-            } else if (calcMode === 'cumulative') {
-                if (idx <= targetIdx) {
-                    monthlyUnpaidAmounts[mk] = fee;
-                    unpaidMonthsList.push(INV_MONTH_SHORT[idx]);
-                } else {
-                    monthlyUnpaidAmounts[mk] = null;
-                }
-            } else if (calcMode === 'all_year') {
-                monthlyUnpaidAmounts[mk] = fee;
-                unpaidMonthsList.push(INV_MONTH_SHORT[idx]);
-            }
-        } else {
-            monthlyUnpaidAmounts[mk] = null;
-        }
-    });
-
-    let billAmount = 0;
-    if (calcMode === 'single') {
-        billAmount = singleMonthAmount;
-    } else if (calcMode === 'all_year') {
-        billAmount = allYearUnpaidAmount;
+        startMonthKey = fiscalYearOrOpts.startMonthKey || fiscalYearOrOpts.monthKey || 'oct';
+        endMonthKey = fiscalYearOrOpts.endMonthKey || fiscalYearOrOpts.monthKey || startMonthKey;
+        mode = fiscalYearOrOpts.calcMode || 'range';
     } else {
-        billAmount = cumulativeAmount;
+        startFY = parseInt(fiscalYearOrOpts, 10) || 2568;
+        endFY = startFY;
+        startMonthKey = targetMonthKey || 'oct';
+        endMonthKey = targetMonthKey || 'oct';
+        mode = calcMode || 'single';
     }
+
+    const startMIdx = Math.max(0, INV_MONTH_KEYS.indexOf(startMonthKey));
+    const endMIdx = Math.max(0, INV_MONTH_KEYS.indexOf(endMonthKey));
+
+    // กำหนดช่วงเริ่มต้นและสิ้นสุดของการคิดยอดตามโหมด
+    let effStartFY = startFY;
+    let effEndFY = endFY;
+    let effStartMIdx = startMIdx;
+    let effEndMIdx = endMIdx;
+
+    if (mode === 'single') {
+        effStartFY = endFY;
+        effEndFY = endFY;
+        effStartMIdx = endMIdx;
+        effEndMIdx = endMIdx;
+    } else if (mode === 'cumulative') {
+        effStartFY = startFY;
+        effEndFY = endFY;
+        effStartMIdx = 0; // ตั้งแต่ ต.ค. ของปีเริ่มต้น
+        effEndMIdx = endMIdx; // ถึงเดือนที่เลือกของปีสิ้นสุด
+    } else if (mode === 'all_year') {
+        effStartFY = startFY;
+        effEndFY = endFY;
+        effStartMIdx = 0;  // ต.ค. ของปีเริ่มต้น
+        effEndMIdx = 11;   // ก.ย. ของปีสิ้นสุด
+    } else if (mode === 'range') {
+        effStartFY = startFY;
+        effEndFY = endFY;
+        effStartMIdx = startMIdx;
+        effEndMIdx = endMIdx;
+        if (effStartFY === effEndFY && effStartMIdx > effEndMIdx) {
+            effEndMIdx = effStartMIdx;
+        }
+    }
+
+    const yearsList = [];
+    for (let y = effStartFY; y <= effEndFY; y++) {
+        yearsList.push(String(y));
+    }
+
+    const yearlyBreakdown = {};
+    let totalBillAmount = 0;
+    const unpaidMonthsList = [];
+
+    yearsList.forEach(yrStr => {
+        const yNum = parseInt(yrStr, 10);
+        const customerYearStatus = customerAllStatus[yrStr] || {};
+        const monthlyUnpaidAmounts = {};
+        const monthlyStatuses = {};
+        let yearUnpaidAmount = 0;
+        const yearUnpaidMonths = [];
+
+        INV_MONTH_KEYS.forEach((mk, idx) => {
+            const status = customerYearStatus[mk] || 'unpaid';
+            monthlyStatuses[mk] = status;
+            const fee = typeof getFeeForMonth === 'function' ? Number(getFeeForMonth(customer.id, mk, yrStr)) : Number(customer.fee || 0);
+            const isUnpaid = (status !== 'paid' && status !== 'exempted');
+
+            // ตรวจสอบว่าเดือนนี้อยู่ในช่วงที่เลือกหรือไม่
+            let inSelectedWindow = true;
+            if (yNum === effStartFY && idx < effStartMIdx) inSelectedWindow = false;
+            if (yNum === effEndFY && idx > effEndMIdx) inSelectedWindow = false;
+
+            if (status === 'paid') {
+                monthlyUnpaidAmounts[mk] = 'paid';
+            } else if (isUnpaid && fee > 0 && inSelectedWindow) {
+                monthlyUnpaidAmounts[mk] = fee;
+                yearUnpaidAmount += fee;
+                totalBillAmount += fee;
+                const calYrShort = String(idx < 3 ? (yNum - 1) : yNum).slice(-2);
+                const labelWithYr = yearsList.length > 1 ? `${INV_MONTH_SHORT[idx]}${calYrShort}` : INV_MONTH_SHORT[idx];
+                unpaidMonthsList.push(labelWithYr);
+                yearUnpaidMonths.push(INV_MONTH_SHORT[idx]);
+            } else {
+                monthlyUnpaidAmounts[mk] = null;
+            }
+        });
+
+        yearlyBreakdown[yrStr] = {
+            fiscalYear: yrStr,
+            monthlyUnpaidAmounts,
+            monthlyStatuses,
+            yearUnpaidAmount,
+            yearUnpaidMonths
+        };
+    });
 
     // ค่ากำจัดมูลฝอย (ถ้ามีการกรอกแยก)
     const disposalFee = parseFloat(getInvoiceOverride(customer.id, 'disposal_fee', 0)) || 0;
-    const totalAmount = billAmount + disposalFee;
+    const totalAmount = totalBillAmount + disposalFee;
 
-    // เดือนและปีปฏิทินของเดือนที่ออกใบแจ้งหนี้ (ต.ค.-ธ.ค. อยู่ปี พ.ศ. ก่อนหน้าปีงบประมาณ 1 ปี)
-    const calYearThai = targetIdx < 3 ? (fyNum - 1) : fyNum;
-    const monthFullLabel = `${INV_MONTH_FULL[targetIdx >= 0 ? targetIdx : 0]} ${calYearThai}`;
+    // สร้างข้อความแสดงงวดเดือน/ปี บนใบแจ้งหนี้
+    const getCalYear = (fy, mIdx) => (mIdx < 3 ? (fy - 1) : fy);
+    let monthFullLabel = '';
+    if (effStartFY === effEndFY && effStartMIdx === effEndMIdx) {
+        const calY = getCalYear(effEndFY, effEndMIdx);
+        monthFullLabel = `${INV_MONTH_FULL[effEndMIdx]} ${calY}`;
+    } else if (effStartFY === effEndFY && effStartMIdx === 0 && effEndMIdx === 11) {
+        monthFullLabel = `ตุลาคม ${effStartFY - 1} - กันยายน ${effEndFY} (ปีงบฯ ${effEndFY})`;
+    } else {
+        const startCalY = getCalYear(effStartFY, effStartMIdx);
+        const endCalY = getCalYear(effEndFY, effEndMIdx);
+        monthFullLabel = `${INV_MONTH_FULL[effStartMIdx]} ${startCalY} - ${INV_MONTH_FULL[effEndMIdx]} ${endCalY}`;
+    }
 
-    // เลขที่ใบแจ้งหนี้ เช่น 6408000138 (ปีงบ 2 หลัก + เดือน 2 หลัก + รหัสลูกค้า 6 หลักท้าย)
-    const fyShort = String(fyNum).slice(-2);
-    const calMonthNum = targetIdx < 3 ? (targetIdx + 10) : (targetIdx - 2);
+    const fiscalYearLabel = effStartFY === effEndFY ? String(effEndFY) : `${effStartFY} - ${effEndFY}`;
+
+    // เลขที่ใบแจ้งหนี้ (อ้างอิงปีสิ้นสุดและเดือนสิ้นสุด)
+    const fyShort = String(effEndFY).slice(-2);
+    const calMonthNum = effEndMIdx < 3 ? (effEndMIdx + 10) : (effEndMIdx - 2);
     const mmStr = String(calMonthNum).padStart(2, '0');
     const cidClean = String(customer.id).replace(/\D/g, '');
     const invoiceNo = `${fyShort}${mmStr}${cidClean.slice(-6).padStart(6, '0')}`;
 
+    // สำหรับความเข้ากันได้กับโค้ดเดิมที่อ่านปีเดียว
+    const primaryYearData = yearlyBreakdown[String(effEndFY)] || {
+        monthlyUnpaidAmounts: {},
+        monthlyStatuses: {}
+    };
+
     return {
         customer,
-        fiscalYear,
-        targetMonthKey,
-        targetIdx,
+        fiscalYear: String(effEndFY),
+        startFiscalYear: String(effStartFY),
+        endFiscalYear: String(effEndFY),
+        fiscalYearLabel,
+        yearsList,
+        yearlyBreakdown,
+        targetMonthKey: INV_MONTH_KEYS[effEndMIdx],
+        targetIdx: effEndMIdx,
+        startMonthIdx: effStartMIdx,
+        endMonthIdx: effEndMIdx,
         monthFullLabel,
         invoiceNo,
-        collectionFee: billAmount,
+        collectionFee: totalBillAmount,
         disposalFee: disposalFee,
         totalAmount: totalAmount,
-        monthlyUnpaidAmounts,
-        monthlyStatuses,
+        monthlyUnpaidAmounts: primaryYearData.monthlyUnpaidAmounts,
+        monthlyStatuses: primaryYearData.monthlyStatuses,
         unpaidMonthsList,
-        isTargetMonthPaid: customerYearStatus[targetMonthKey] === 'paid'
+        isTargetMonthPaid: unpaidMonthsList.length === 0
     };
 }
 
@@ -398,26 +471,17 @@ function buildInvoicePrintCSS(perPage = 1) {
             margin-bottom: 3px;
         }
 
-        /* Main Two-Column Tables Area */
-        .inv-tables-wrap {
-            display: flex;
-            justify-content: space-between;
-            gap: 14px;
-            align-items: flex-start;
-            margin-bottom: 6px;
-        }
-        .inv-left-col {
-            width: 53%;
-        }
-        .inv-right-col {
-            width: 45%;
+        /* Full-width Horizontal Tables Area */
+        .inv-full-section {
+            width: 100%;
+            margin-bottom: 8px;
         }
 
         .inv-table {
             width: 100%;
             border-collapse: collapse;
             border: 1px solid #000;
-            font-size: 10.5pt;
+            font-size: 10pt;
         }
         .inv-table th {
             background-color: #e2efda;
@@ -431,10 +495,10 @@ function buildInvoicePrintCSS(perPage = 1) {
             padding: 4px 8px;
             border-left: 1px solid #000;
             border-right: 1px solid #000;
-            vertical-align: top;
+            vertical-align: middle;
         }
         .inv-detail-table tbody tr td {
-            border-bottom: none;
+            border-bottom: 1px solid #e5e7eb;
             height: 24px;
         }
         .inv-detail-table tfoot td {
@@ -454,26 +518,43 @@ function buildInvoicePrintCSS(perPage = 1) {
 
         .inv-history-header {
             background-color: #e2efda;
-            color: #111;
+            color: #1f3d12;
             font-weight: 700;
-            text-align: center;
-            padding: 3px 6px;
+            text-align: left;
+            padding: 4px 10px;
             margin-bottom: 4px;
             font-size: 10.5pt;
+            border-radius: 2px;
         }
-        .inv-history-table td {
+        .inv-history-wide-table th,
+        .inv-history-wide-table td {
             border: 1px solid #000;
-            padding: 2.5px 6px;
+            padding: 3px 4px;
             text-align: center;
+            font-size: 9.5pt;
             height: 22px;
         }
-        .inv-history-table td.amt-cell {
-            text-align: right;
-            width: 28%;
+        .inv-history-wide-table td.yr-cell {
+            font-weight: 700;
+            background-color: #f8fafc;
+            width: 11%;
         }
-        .inv-history-table td.m-cell {
-            width: 22%;
-            color: #333;
+        .inv-history-wide-table td.m-amt-cell {
+            text-align: right;
+            width: 6.4%;
+        }
+        .inv-history-wide-table td.yr-total-cell {
+            text-align: right;
+            font-weight: 700;
+            width: 12%;
+            background-color: #fcfdfd;
+        }
+        .inv-history-wide-table tfoot td {
+            border-top: 1.5px solid #000;
+            font-weight: 700;
+            padding: 4px 6px;
+            background-color: #e2efda;
+            color: #1f3d12;
         }
 
         /* Baht Text & Footer Meta */
@@ -481,7 +562,7 @@ function buildInvoicePrintCSS(perPage = 1) {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-top: 5px;
+            margin-top: 6px;
             margin-bottom: 6px;
             padding-left: 4px;
         }
@@ -490,14 +571,15 @@ function buildInvoicePrintCSS(perPage = 1) {
             padding: 2px 18px;
             font-weight: 700;
             color: #1f3d12;
-            min-width: 210px;
+            min-width: 240px;
             text-align: center;
         }
 
         .inv-under-tables {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: flex-end;
+            margin-top: 6px;
             margin-bottom: 8px;
             padding: 0 4px;
         }
@@ -505,7 +587,7 @@ function buildInvoicePrintCSS(perPage = 1) {
             margin-bottom: 3px;
         }
         .inv-staff-sign {
-            width: 45%;
+            min-width: 220px;
             text-align: center;
             padding-top: 2px;
         }
@@ -579,7 +661,7 @@ function buildInvoicePrintCSS(perPage = 1) {
 }
 
 /**
- * สร้าง HTML ของใบแจ้งหนี้ 1 ใบ (ตามแบบภาพที่แนบมา)
+ * สร้าง HTML ของใบแจ้งหนี้ 1 ใบ (ตารางรายละเอียดแนวนอนเต็มความกว้าง และตารางประวัติการค้างชำระแนวนอนด้านล่าง)
  */
 function buildSingleInvoiceHTML(invData, options = {}) {
     const settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
@@ -617,7 +699,6 @@ function buildSingleInvoiceHTML(invData, options = {}) {
 
     const issueDateThai = formatThaiFullDate(options.issueDate);
     const dueDateThai = formatThaiFullDate(options.dueDate);
-    const wasteVolume = getInvoiceOverride(c.id, 'waste_volume', options.wasteVolume || '-');
     const staffName = options.staffName || 'เจ้าหน้าที่จัดเก็บรายได้';
     const bankName = settings.bank_name || 'ธนาคารกรุงไทย';
     const comCode = settings.company_code || settings.tax_id || '98553';
@@ -627,36 +708,112 @@ function buildSingleInvoiceHTML(invData, options = {}) {
     const disposalFmt = invData.disposalFee > 0 ? formatMoneyDecimal(invData.disposalFee) : '';
     const bahtText = numberToThaiBahtText(invData.totalAmount);
 
-    // สร้างตารางประวัติการค้างชำระ 6 แถว (ซ้าย: ต.ค.-มี.ค., ขวา: เม.ย.-ก.ย.)
-    const formatHistoryCell = (val) => {
-        if (val === 'paid') {
-            return `<span style="color: #16a34a; font-weight: 700; font-size: 9.5pt;">ชำระแล้ว</span>`;
-        }
-        if (val !== null && val !== undefined) {
-            return formatMoneyDecimal(val);
-        }
-        return '';
-    };
+    const yearsList = Array.isArray(invData.yearsList) && invData.yearsList.length > 0 ? invData.yearsList : [String(invData.fiscalYear)];
+    const isMultiYear = yearsList.length > 1;
 
-    let historyRowsHTML = '';
-    for (let r = 0; r < 6; r++) {
-        const leftIdx = r;          // 0..5 (ต.ค. - มี.ค.)
-        const rightIdx = r + 6;     // 6..11 (เม.ย. - ก.ย.)
-        const leftKey = INV_MONTH_KEYS[leftIdx];
-        const rightKey = INV_MONTH_KEYS[rightIdx];
-
-        const leftAmt = invData.monthlyUnpaidAmounts[leftKey];
-        const rightAmt = invData.monthlyUnpaidAmounts[rightKey];
-
-        historyRowsHTML += `
+    // 1. สร้างแถวตารางรายละเอียดด้านบน (แนวนอนเต็มความกว้าง)
+    let detailRowsHTML = '';
+    if (isMultiYear) {
+        let rowSeq = 1;
+        yearsList.forEach(yrStr => {
+            const yrObj = invData.yearlyBreakdown && invData.yearlyBreakdown[yrStr];
+            const yrAmt = yrObj ? yrObj.yearUnpaidAmount : 0;
+            const yrMonthsText = (yrObj && yrObj.yearUnpaidMonths && yrObj.yearUnpaidMonths.length > 0)
+                ? ` (${yrObj.yearUnpaidMonths.length} เดือน: ${yrObj.yearUnpaidMonths.join(', ')})`
+                : '';
+            detailRowsHTML += `
+                <tr>
+                    <td style="text-align: center;">${rowSeq++}</td>
+                    <td>ค่าเก็บและขนมูลฝอย ปีงบประมาณ ${yrStr}${yrMonthsText}</td>
+                    <td style="text-align: right;">${formatMoneyDecimal(yrAmt)}</td>
+                </tr>
+            `;
+        });
+        detailRowsHTML += `
             <tr>
-                <td class="m-cell">${INV_MONTH_SHORT[leftIdx]}</td>
-                <td class="${leftAmt === 'paid' ? 'amt-cell text-center' : 'amt-cell'}" style="${leftAmt === 'paid' ? 'text-align: center;' : ''}">${formatHistoryCell(leftAmt)}</td>
-                <td class="m-cell">${INV_MONTH_SHORT[rightIdx]}</td>
-                <td class="${rightAmt === 'paid' ? 'amt-cell text-center' : 'amt-cell'}" style="${rightAmt === 'paid' ? 'text-align: center;' : ''}">${formatHistoryCell(rightAmt)}</td>
+                <td style="text-align: center;">${rowSeq}</td>
+                <td>ค่ากำจัดมูลฝอย</td>
+                <td style="text-align: right;">${disposalFmt}</td>
+            </tr>
+        `;
+    } else {
+        detailRowsHTML = `
+            <tr>
+                <td style="text-align: center;">1</td>
+                <td>ค่าเก็บและขนมูลฝอย</td>
+                <td style="text-align: right;">${collectionFmt}</td>
+            </tr>
+            <tr>
+                <td style="text-align: center;">2</td>
+                <td>ค่ากำจัดมูลฝอย</td>
+                <td style="text-align: right;">${disposalFmt}</td>
             </tr>
         `;
     }
+
+    // 2. สร้างตารางประวัติการค้างชำระแนวนอนด้านล่าง
+    // หัวคอลัมน์: ปีงบประมาณ | ต.ค. | พ.ย. | ธ.ค. | ม.ค. | ก.พ. | มี.ค. | เม.ย. | พ.ค. | มิ.ย. | ก.ค. | ส.ค. | ก.ย. | รวมยอด
+    let grandHistoryUnpaidTotal = 0;
+    let historyWideRowsHTML = '';
+
+    yearsList.forEach(yrStr => {
+        const yrObj = (invData.yearlyBreakdown && invData.yearlyBreakdown[yrStr])
+            ? invData.yearlyBreakdown[yrStr]
+            : { monthlyUnpaidAmounts: invData.monthlyUnpaidAmounts || {}, yearUnpaidAmount: 0 };
+
+        let yearRowSum = 0;
+        let monthCellsHTML = '';
+
+        INV_MONTH_KEYS.forEach(mk => {
+            const val = yrObj.monthlyUnpaidAmounts[mk];
+            if (typeof val === 'number' && val > 0) {
+                yearRowSum += val;
+                monthCellsHTML += `<td class="m-amt-cell">${formatMoney(Math.round(val))}</td>`;
+            } else if (val === 'paid') {
+                monthCellsHTML += `<td class="m-amt-cell" style="text-align: center; color: #16a34a; font-size: 8.5pt; font-weight: 600;">ชำระแล้ว</td>`;
+            } else {
+                monthCellsHTML += `<td class="m-amt-cell"></td>`;
+            }
+        });
+
+        grandHistoryUnpaidTotal += yearRowSum;
+
+        historyWideRowsHTML += `
+            <tr>
+                <td class="yr-cell">${yrStr}</td>
+                ${monthCellsHTML}
+                <td class="yr-total-cell">${formatMoney(Math.round(yearRowSum))}</td>
+            </tr>
+        `;
+    });
+
+    const historyHeaderTitle = isMultiYear
+        ? `ประวัติการค้างชำระค่าธรรมเนียม ปีงบประมาณ ${invData.fiscalYearLabel}`
+        : `ประวัติการค้างชำระค่าธรรมเนียม ปีงบประมาณ ${invData.fiscalYear}`;
+
+    const historyWideTableHTML = `
+        <div class="inv-full-section">
+            <div class="inv-history-header">${historyHeaderTitle}</div>
+            <table class="inv-table inv-history-wide-table">
+                <thead>
+                    <tr>
+                        <th style="width: 11%;">ปีงบประมาณ</th>
+                        ${INV_MONTH_SHORT.map(m => `<th style="width: 6.4%;">${m}</th>`).join('')}
+                        <th style="width: 12%;">รวมยอด</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${historyWideRowsHTML}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="13" style="text-align: right; padding-right: 10px;">ยอดรวมทั้งหมด (บาท)</td>
+                        <td style="text-align: right; background-color: #fff; color: #111;">${formatMoney(Math.round(grandHistoryUnpaidTotal))}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    `;
 
     // สร้างข้อมูล Barcode & QR Code
     const bcInfo = buildComcodeBarcodeData(c, invData.totalAmount, settings, invData.invoiceNo);
@@ -719,93 +876,63 @@ function buildSingleInvoiceHTML(invData, options = {}) {
 
             <!-- สรุปเดือนที่แจ้งหนี้ -->
             <div class="inv-fee-summary">
-                <div class="inv-fee-row">
-                    <div>
-                        <span class="inv-label-green me-3">มีค่าธรรมเนียมจัดการมูลฝอยประจำเดือน</span>
-                        <span style="font-weight: 600;">${invData.monthFullLabel}</span>
-                    </div>
-                    <div style="min-width: 240px; display:flex; justify-content:space-between;">
-                        <span class="inv-label-green">เป็นจำนวนเงิน</span>
-                        <span style="font-weight: 700;">${totalFmt}</span>
-                        <span class="inv-label-green">บาท</span>
-                    </div>
+                <div style="margin-bottom: 3px; white-space: nowrap;">
+                    <span class="inv-label-green" style="margin-right: 10px;">มีค่าธรรมเนียมจัดการมูลฝอยประจำเดือน</span>
+                    <span style="font-weight: 600;">${invData.monthFullLabel}</span>
+                </div>
+                <div style="margin-bottom: 3px;">
+                    <span class="inv-label-green" style="margin-right: 12px;">เป็นจำนวนเงิน</span>
+                    <span style="font-weight: 700; margin-right: 12px;">${totalFmt}</span>
+                    <span class="inv-label-green">บาท</span>
                 </div>
             </div>
 
-            <!-- ตาราง 2 ฝั่ง: รายละเอียด (ซ้าย) และ ประวัติการค้างชำระ (ขวา) -->
-            <div class="inv-tables-wrap">
-                <div class="inv-left-col">
-                    <div class="inv-label-green mb-1" style="padding-left: 6px;">รายละเอียดดังนี้</div>
-                    <table class="inv-table inv-detail-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 14%;">ลำดับ</th>
-                                <th style="width: 58%;">รายการ</th>
-                                <th style="width: 28%;">จำนวนเงิน (บาท)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style="text-align: center;">1</td>
-                                <td>ค่าเก็บและขนมูลฝอย</td>
-                                <td style="text-align: right;">${collectionFmt}</td>
-                            </tr>
-                            <tr>
-                                <td style="text-align: center;">2</td>
-                                <td>ค่ากำจัดมูลฝอย</td>
-                                <td style="text-align: right;">${disposalFmt}</td>
-                            </tr>
-                            <tr>
-                                <td style="text-align: center;">3</td>
-                                <td>${c.note ? `<small style="color:#555;">(${c.note})</small>` : ''}</td>
-                                <td style="text-align: right;"></td>
-                            </tr>
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="2" class="total-label">รวมทั้งสิ้น (บาท)</td>
-                                <td class="total-val">${totalFmt}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
+            <!-- ตารางรายละเอียด (ขยายแนวยาวเต็มความกว้างแนวนอน) -->
+            <div class="inv-full-section">
+                <div class="inv-label-green mb-1" style="padding-left: 6px;">รายละเอียดดังนี้</div>
+                <table class="inv-table inv-detail-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">ลำดับ</th>
+                            <th style="width: 68%;">รายการ</th>
+                            <th style="width: 22%;">จำนวนเงิน (บาท)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${detailRowsHTML}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="2" class="total-label">รวมทั้งสิ้น (บาท)</td>
+                            <td class="total-val">${totalFmt}</td>
+                        </tr>
+                    </tfoot>
+                </table>
 
-                    <div class="inv-baht-text-row">
-                        <span class="inv-label-green">จำนวนเงินทั้งสิ้น</span>
-                        <span class="inv-baht-pill">(${bahtText})</span>
+                <div class="inv-baht-text-row">
+                    <span class="inv-label-green">จำนวนเงินทั้งสิ้น</span>
+                    <span class="inv-baht-pill">(${bahtText})</span>
+                </div>
+            </div>
+
+            <!-- ตารางประวัติการค้างชำระ (แนวยาวด้านล่าง: ปีงบประมาณ | ต.ค. - ก.ย. | รวมยอด) -->
+            ${historyWideTableHTML}
+
+            <!-- ข้อมูลกำหนดชำระและผู้ทำรายการ -->
+            <div class="inv-under-tables">
+                <div class="inv-due-info" style="font-size: 10.5pt;">
+                    <div>
+                        <span class="inv-label-green me-3">กรุณาชำระค่าธรรมเนียมภายในวันที่</span>
+                        <span>${dueDateThai}</span>
                     </div>
-
-                    <div class="inv-due-info" style="padding-left: 4px; font-size: 10.5pt;">
-                        <div>
-                            <span class="inv-label-green me-3">กรุณาชำระค่าธรรมเนียมภายในวันที่</span>
-                            <span>${dueDateThai}</span>
-                        </div>
-                        <div>
-                            <span class="inv-label-green me-3">ชำระผ่านเคาน์เตอร์${bankName}</span>
-                            <span>${comCode}</span>
-                        </div>
+                    <div>
+                        <span class="inv-label-green me-3">ชำระผ่านเคาน์เตอร์${bankName}</span>
+                        <span>${comCode}</span>
                     </div>
                 </div>
-
-                <div class="inv-right-col">
-                    <div class="inv-history-header">ประวัติการค้างชำระค่าธรรมเนียม ปีงบประมาณ ${invData.fiscalYear}</div>
-                    <table class="inv-table inv-history-table">
-                        <thead>
-                            <tr>
-                                <th>เดือน</th>
-                                <th>บาท</th>
-                                <th>เดือน</th>
-                                <th>บาท</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${historyRowsHTML}
-                        </tbody>
-                    </table>
-
-                    <div class="inv-staff-sign" style="width: 100%; margin-top: 8px;">
-                        <div class="inv-staff-name">${staffName}</div>
-                        <div class="inv-staff-role">พนักงานผู้ทำรายการ</div>
-                    </div>
+                <div class="inv-staff-sign">
+                    <div class="inv-staff-name">${staffName}</div>
+                    <div class="inv-staff-role">พนักงานผู้ทำรายการ</div>
                 </div>
             </div>
 

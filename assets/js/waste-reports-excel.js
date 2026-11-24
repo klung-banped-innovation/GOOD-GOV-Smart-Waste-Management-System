@@ -2,39 +2,57 @@
 // EXCEL REPORTS GENERATOR using SheetJS
 // ============================================
 
+function formatPaymentMethodExcel(method) {
+    if (!method) return '-';
+    var m = String(method).trim();
+    if (m === 'โอน') return 'เงินโอน';
+    return m;
+}
+
 function exportDailyExcel() {
     var filterDate = document.getElementById('filterDate').value;
     if (!filterDate) { Swal.fire('กรุณาเลือกวันที่', '', 'warning'); return; }
 
     var payments = typeof getWastePayments === 'function' ? getWastePayments() : [];
-    var allPayments = payments.filter(function(p) { return p.status === 'completed'; });
+    var customers = typeof getWasteCustomers === 'function' ? getWasteCustomers() : [];
+    var todayPayments = payments.filter(function(p) { return p.date === filterDate && p.status === 'completed'; });
 
-    var dailySum = {};
-    allPayments.forEach(function(p) {
-        if (!dailySum[p.date]) dailySum[p.date] = { count: 0, total: 0 };
-        dailySum[p.date].count++;
-        dailySum[p.date].total += p.amount;
-    });
-
-    var rows = [];
-    Object.keys(dailySum).sort().reverse().forEach(function(d, idx) {
-        rows.push({
-            'ลำดับ': idx + 1,
-            'วันที่': d,
-            'จำนวนรายการ': dailySum[d].count,
-            'ยอดรวม (บาท)': dailySum[d].total
-        });
-    });
-
-    if (rows.length === 0) {
-        Swal.fire('ไม่มีข้อมูล', '', 'warning');
+    if (todayPayments.length === 0) {
+        Swal.fire('ไม่มีข้อมูล', 'ไม่มีรายการชำระสำหรับวันที่เลือก', 'warning');
         return;
     }
+
+    var rows = [];
+    todayPayments.forEach(function(p, idx) {
+        var cust = customers.find(function(c){ return c.id === p.customer_id; });
+        var houseNo = p.house_no || (cust ? cust.house_no : '-');
+        var moo = cust ? cust.moo : '-';
+        var monthsPaid = Array.isArray(p.months_paid) ? p.months_paid : [p.months_paid || '-'];
+        var feePerMonth = cust ? cust.fee : (monthsPaid.length > 0 ? Math.round(p.amount / monthsPaid.length) : p.amount);
+
+        var rowTotal = p.amount;
+        var cats = typeof calculatePaymentCategories === 'function'
+            ? calculatePaymentCategories(p.date, monthsPaid, feePerMonth, rowTotal)
+            : { debt: 0, regular: rowTotal, advance: 0 };
+
+        rows.push({
+            'ลำดับ': idx + 1,
+            'เลขที่ใบเสร็จ': p.receipt_no || '-',
+            'ชื่อลูกค้า': p.customer_name || '-',
+            'บ้านเลขที่': houseNo,
+            'หมู่ที่': moo,
+            'รับชำระลูกหนี้': cats.debt,
+            'รับปกติ': cats.regular,
+            'รับล่วงหน้า': cats.advance,
+            'วิธีชำระ': formatPaymentMethodExcel(p.method),
+            'รวม': rowTotal
+        });
+    });
 
     var ws = XLSX.utils.json_to_sheet(rows);
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "รายงานรายวัน");
-    XLSX.writeFile(wb, "รายงานรายวัน.xlsx");
+    XLSX.writeFile(wb, "รายงานรายวัน_" + filterDate + ".xlsx");
 }
 
 function exportMonthlyExcel() {
@@ -99,10 +117,10 @@ function exportAllExcel() {
         var monthsPaid = Array.isArray(p.months_paid) ? p.months_paid : [p.months_paid || '-'];
         var feePerMonth = cust ? cust.fee : (monthsPaid.length > 0 ? Math.round(p.amount / monthsPaid.length) : p.amount);
 
-        var debtAmt = 0;
-        var regularAmt = feePerMonth * monthsPaid.length;
-        var advanceAmt = 0;
         var rowTotal = p.amount;
+        var cats = typeof calculatePaymentCategories === 'function'
+            ? calculatePaymentCategories(p.date, monthsPaid, feePerMonth, rowTotal)
+            : { debt: 0, regular: rowTotal, advance: 0 };
 
         rows.push({
             'ลำดับ': idx + 1,
@@ -111,9 +129,10 @@ function exportAllExcel() {
             'ชื่อลูกค้า': p.customer_name || '-',
             'บ้านเลขที่': houseNo,
             'หมู่ที่': moo,
-            'รับชำระลูกหนี้': debtAmt,
-            'รับปกติ': regularAmt,
-            'รับล่วงหน้า': advanceAmt,
+            'รับชำระลูกหนี้': cats.debt,
+            'รับปกติ': cats.regular,
+            'รับล่วงหน้า': cats.advance,
+            'วิธีชำระ': formatPaymentMethodExcel(p.method),
             'รวม': rowTotal
         });
     });

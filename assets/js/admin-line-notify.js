@@ -250,10 +250,18 @@ async function sendLineNotification() {
         }
         
         // Check if there are failures in the results
-        const results = data.results || [];
+        const results = (data && Array.isArray(data.results)) ? data.results : [];
         const failures = results.filter(r => r.status === 'failed');
+        const successResults = results.filter(r => r.status === 'sent' || r.status === 'success' || !r.status);
         
-        if (failures.length > 0) {
+        const badgeCount = parseInt(document.getElementById('lineNotifyCountBadge')?.textContent) || 0;
+        const sentCount = (data && Number(data.sent_count) > 0) ? Number(data.sent_count)
+            : (data && Number(data.total_sent) > 0) ? Number(data.total_sent)
+            : (data && Number(data.total_linked) > 0) ? Number(data.total_linked)
+            : (successResults.length > 0) ? successResults.length
+            : (badgeCount > 0 ? badgeCount : 1);
+        
+        if (failures.length > 0 && successResults.length === 0) {
             const errorMsg = failures[0].error || 'เกิดข้อผิดพลาดจาก LINE API';
             Swal.fire({
                 title: 'ส่งแจ้งเตือนล้มเหลวบางส่วน',
@@ -264,7 +272,7 @@ async function sendLineNotification() {
         } else {
             Swal.fire({
                 title: 'ส่งแจ้งเตือนสำเร็จ',
-                text: `ส่งข้อความไปยัง ${data.total_linked || 0} บัญชีแล้ว`,
+                text: `ส่งข้อความไปยัง ${sentCount} บัญชีแล้ว`,
                 icon: 'success',
                 confirmButtonText: 'ตกลง'
             }).then(() => {

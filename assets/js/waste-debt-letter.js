@@ -20,14 +20,132 @@ var DEBT_LETTER_CONFIG = {
     orgTel: ''
 };
 
+function debtLetterNumberToThaiBahtText(amount) {
+    amount = parseFloat(amount) || 0;
+    if (amount === 0) return 'ศูนย์บาทถ้วน';
+
+    var numText = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+    var unitText = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+
+    function convertInteger(numStr) {
+        var result = '';
+        var len = numStr.length;
+        for (var i = 0; i < len; i++) {
+            var digit = parseInt(numStr.charAt(i), 10);
+            var pos = len - i - 1;
+            var unitPos = pos % 6;
+
+            if (digit !== 0) {
+                if (unitPos === 0 && digit === 1 && len > 1 && i > 0 && numStr.charAt(i - 1) !== '0') {
+                    result += 'เอ็ด';
+                } else if (unitPos === 1 && digit === 2) {
+                    result += 'ยี่';
+                } else if (unitPos === 1 && digit === 1) {
+                    result += '';
+                } else {
+                    result += numText[digit];
+                }
+                result += unitText[unitPos];
+            }
+            if (pos > 0 && unitPos === 0) {
+                result += 'ล้าน';
+            }
+        }
+        return result;
+    }
+
+    var parts = amount.toFixed(2).split('.');
+    var bahtPart = parseInt(parts[0], 10);
+    var satangPart = parseInt(parts[1], 10);
+
+    var text = '';
+    if (bahtPart > 0) {
+        text += convertInteger(String(bahtPart)) + 'บาท';
+    }
+    if (satangPart > 0) {
+        text += convertInteger(String(satangPart)) + 'สตางค์';
+    } else {
+        text += 'ถ้วน';
+    }
+    return text;
+}
+
+function buildDebtLetterComcodeData(d, settings) {
+    var compCode = settings.company_code || '98553';
+    var taxId = settings.tax_id || settings.company_code || '0994000160381';
+    var suffix = settings.branch_suffix || '00';
+    var billerId = String(taxId).length >= 15 ? String(taxId) : (String(taxId) + String(suffix));
+
+    // Ref1: รหัสลูกค้า 18 หลัก (มาตรฐานเดียวกับระบบหน้าบ้านและใบแจ้งหนี้)
+    var ref1 = String(d.id).padStart(18, '0');
+
+    // Ref2: วันที่เวลา + รหัสลูกค้า 6 หลักท้าย (18 หลัก)
+    var now = new Date();
+    var yyyy = String(now.getFullYear()).padStart(4, '0');
+    var MM = String(now.getMonth() + 1).padStart(2, '0');
+    var dd = String(now.getDate()).padStart(2, '0');
+    var HHmm = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+    var cidTail = String(d.id).replace(/\D/g, '').slice(-6).padStart(6, '0');
+    var ref2 = yyyy + MM + dd + HHmm + cidTail;
+
+    var totalAmount = parseFloat(d.total_debt) || 0;
+    var amountSatang = Math.round(totalAmount * 100).toString();
+
+    // รูปแบบบาร์โค้ดมาตรฐาน Cross-Bank Bill Payment
+    var barcodeData = '|' + billerId + '\r' + ref1 + '\r' + ref2 + '\r' + amountSatang;
+    var barcodeTextDisplay = billerId + ' ' + ref1 + ' ' + ref2 + ' ' + amountSatang;
+
+    // กำหนดชำระภายในวันที่ (ดึงจากช่องระบุกำหนดชำระในหน้า waste-debtors.html หรือ localStorage ก่อน)
+    var customDueIso = '';
+    if (typeof document !== 'undefined') {
+        var dueInput = document.getElementById('debtDueDate');
+        if (dueInput && dueInput.value) customDueIso = dueInput.value;
+    }
+    if (!customDueIso) {
+        try { customDueIso = localStorage.getItem('waste_debt_due_date') || ''; } catch (e) {}
+    }
+
+    var dueDateStr = '';
+    if (customDueIso && customDueIso.split('-').length === 3) {
+        var parts = customDueIso.split('-');
+        var yNum = parseInt(parts[0], 10);
+        if (yNum < 2400) yNum += 543;
+        dueDateStr = parts[2] + '/' + parts[1] + '/' + String(yNum);
+    } else {
+        var dueDays = parseInt(settings.due_days || DEBT_LETTER_CONFIG.bylawDays || 15, 10);
+        if (isNaN(dueDays) || dueDays < 1) dueDays = 15;
+        var dueDate = new Date(now.getTime() + dueDays * 24 * 60 * 60 * 1000);
+        var dueDd = String(dueDate.getDate()).padStart(2, '0');
+        var dueMm = String(dueDate.getMonth() + 1).padStart(2, '0');
+        var dueYyyy = String(dueDate.getFullYear() + 543);
+        dueDateStr = dueDd + '/' + dueMm + '/' + dueYyyy;
+    }
+
+    var qrFallbackUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(barcodeData);
+
+    return {
+        compCode: compCode,
+        taxId: taxId,
+        suffix: suffix,
+        billerId: billerId,
+        ref1: ref1,
+        ref2: ref2,
+        amountSatang: amountSatang,
+        barcodeData: barcodeData,
+        barcodeTextDisplay: barcodeTextDisplay,
+        dueDateStr: dueDateStr,
+        qrFallbackUrl: qrFallbackUrl
+    };
+}
+
 function buildDebtLetterCSS() {
     return [
         "@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');",
         "@page { size: A4; margin: 0; }",
         "* { margin:0; padding:0; box-sizing:border-box; }",
-        "body { font-family: 'Sarabun', 'TH Sarabun New', 'TH SarabunPSK', sans-serif; font-size: 12pt; color: #000; line-height: 1.15; background: #eee; }",
+        "body { font-family: 'Sarabun', 'TH Sarabun New', 'TH SarabunPSK', sans-serif; font-size: 11.5pt; color: #000; line-height: 1.15; background: #eee; }",
 
-        // === PAGE 1: หนังสือราชการภายนอก ===
+        // === PAGE 1: หนังสือราชการภายนอก + แบบฟอร์มชำระเงิน ธ.กรุงไทย ===
         ".page {",
         "  width: 210mm; height: 297mm;",
         "  padding: 0;",
@@ -38,28 +156,231 @@ function buildDebtLetterCSS() {
         "  box-shadow: 0 2px 8px rgba(0,0,0,0.15);",
         "  overflow: hidden;",
         "}",
-        ".garuda { position: absolute; top: 15mm; left: 50%; transform: translateX(-50%); }",
-        ".garuda img { height: 35mm; }",
-        ".content-wrapper { padding: 45mm 25mm 20mm 30mm; }",
-        ".header-row { position: relative; margin-bottom: 8mm; min-height: 15mm; }",
-        ".doc-no { position: absolute; left: 0; top: 0; font-size: 12pt; }",
-        ".org-info { position: absolute; left: 55%; top: 0; right: 0; font-size: 12pt; line-height: 1.3; text-align: left; }",
-        ".date-line { margin-left: 50%; font-size: 12pt; margin-bottom: 5mm; }",
-        ".subject { font-size: 12pt; margin-bottom: 3mm; }",
-        ".to-line { font-size: 12pt; margin-bottom: 5mm; }",
-        ".body-text { text-indent: 25mm; text-align: justify; font-size: 12pt; line-height: 1.3; margin-bottom: 3mm; }",
-        ".closing-block { margin-top: 5mm; margin-left: 50%; width: 60mm; text-align: center; }",
-        ".closing-block .regards { font-size: 12pt; margin-bottom: 12mm; text-align: center; }",
+        ".garuda { position: absolute; top: 8mm; left: 50%; transform: translateX(-50%); }",
+        ".garuda img { height: 24mm; }",
+        ".content-wrapper { padding: 30mm 20mm 0 24mm; }",
+        ".header-row { position: relative; margin-bottom: 4mm; min-height: 11mm; }",
+        ".doc-no { position: absolute; left: 0; top: 0; font-size: 11.5pt; }",
+        ".org-info { position: absolute; left: 55%; top: 0; right: 0; font-size: 11.5pt; line-height: 1.25; text-align: left; }",
+        ".date-line { margin-left: 50%; font-size: 11.5pt; margin-bottom: 2.5mm; }",
+        ".subject { font-size: 11.5pt; margin-bottom: 2mm; }",
+        ".to-line { font-size: 11.5pt; margin-bottom: 2.5mm; }",
+        ".body-text { text-indent: 22mm; text-align: justify; font-size: 11.5pt; line-height: 1.26; margin-bottom: 2mm; }",
+        ".closing-block { margin-top: 2.5mm; margin-left: 48%; width: 65mm; text-align: center; }",
+        ".closing-block .regards { font-size: 11.5pt; margin-bottom: 2mm; text-align: center; }",
         ".closing-block .sign-area { text-align: center; }",
-        ".closing-block .sign-area .signer-name { font-size: 12pt; }",
-        ".closing-block .sign-area .signer-title { font-size: 12pt; }",
-        ".qr-section { position: absolute; bottom: 40mm; left: 30mm; display: flex; align-items: center; gap: 8mm; }",
-        ".qr-code-img { width: 28mm; height: 28mm; border: 1px solid #ddd; }",
-        ".qr-text { font-size: 11pt; display: flex; align-items: center; gap: 5px; color: #444; }",
-        ".qr-text-icon { background: #8eb0c6; color: #fff; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 10pt; }",
-        ".footer-section { position: absolute; bottom: 20mm; left: 30mm; font-size: 12pt; line-height: 1.3; }",
-        ".footer-section .dept { font-weight: 400; }",
-        ".footer-section .dept-tel { }",
+        ".closing-block .sign-area .signer-name { font-size: 11.5pt; }",
+        ".closing-block .sign-area .signer-title { font-size: 11pt; line-height: 1.2; }",
+
+        // === แบบฟอร์มการชำระเงิน บมจ. ธนาคารกรุงไทย (ส่วนท้าย หน้าที่ 1) ===
+        ".ktb-payment-form {",
+        "  position: absolute;",
+        "  bottom: 7mm;",
+        "  left: 14mm;",
+        "  right: 14mm;",
+        "  border-top: 1px solid #222;",
+        "  padding-top: 2mm;",
+        "  font-size: 9pt;",
+        "  line-height: 1.25;",
+        "  color: #000;",
+        "}",
+        ".ktb-header-row {",
+        "  display: flex;",
+        "  justify-content: space-between;",
+        "  align-items: flex-start;",
+        "  margin-bottom: 1.2mm;",
+        "}",
+        ".ktb-brand-left {",
+        "  display: flex;",
+        "  align-items: center;",
+        "  gap: 2.5mm;",
+        "}",
+        ".ktb-logo-box {",
+        "  display: flex;",
+        "  flex-direction: column;",
+        "  align-items: center;",
+        "  justify-content: center;",
+        "  width: 11.5mm;",
+        "  flex-shrink: 0;",
+        "}",
+        ".ktb-logo-text {",
+        "  font-size: 7.5pt;",
+        "  font-weight: 700;",
+        "  color: #005691;",
+        "  line-height: 1;",
+        "  margin-top: 0.6mm;",
+        "}",
+        ".ktb-title-block {",
+        "  font-size: 9.3pt;",
+        "  line-height: 1.3;",
+        "}",
+        ".ktb-for-bank {",
+        "  font-size: 9.3pt;",
+        "  white-space: nowrap;",
+        "}",
+        ".ktb-customer-line {",
+        "  font-size: 9.3pt;",
+        "  margin-bottom: 0.8mm;",
+        "}",
+        ".ktb-ref-table {",
+        "  width: 100%;",
+        "  border-collapse: collapse;",
+        "  margin-bottom: 1.5mm;",
+        "  font-size: 9pt;",
+        "}",
+        ".ktb-ref-table td {",
+        "  padding: 0.3mm 0;",
+        "  white-space: nowrap;",
+        "  vertical-align: middle;",
+        "}",
+        ".ktb-ref-label-col1 {",
+        "  display: inline-block;",
+        "  min-width: 39mm;",
+        "  padding-right: 2.5mm;",
+        "}",
+        ".ktb-ref-label-col2 {",
+        "  display: inline-block;",
+        "  min-width: 21mm;",
+        "  padding-right: 2.5mm;",
+        "}",
+        ".ktb-table {",
+        "  width: 100%;",
+        "  border-collapse: collapse;",
+        "  margin-bottom: 1.8mm;",
+        "  font-size: 8.8pt;",
+        "}",
+        ".ktb-table th, .ktb-table td {",
+        "  border: 1px solid #000;",
+        "  padding: 1mm 1.8mm;",
+        "  vertical-align: middle;",
+        "}",
+        ".ktb-table th {",
+        "  text-align: center;",
+        "  font-weight: 600;",
+        "  background: #fff;",
+        "  white-space: nowrap;",
+        "}",
+        ".ktb-nowrap {",
+        "  white-space: nowrap;",
+        "}",
+        ".ktb-circle {",
+        "  display: inline-block;",
+        "  width: 3mm;",
+        "  height: 3mm;",
+        "  border: 1px solid #000;",
+        "  border-radius: 50%;",
+        "  vertical-align: middle;",
+        "  margin-right: 1.5mm;",
+        "}",
+        ".ktb-amount-cell {",
+        "  text-align: right;",
+        "  font-weight: 700;",
+        "  font-size: 10.5pt;",
+        "  padding-right: 2.5mm !important;",
+        "  white-space: nowrap;",
+        "}",
+        ".ktb-baht-text-cell {",
+        "  text-align: center;",
+        "  font-weight: 600;",
+        "}",
+        ".ktb-depositor-row td {",
+        "  padding: 1.5mm 2mm;",
+        "  font-size: 8.8pt;",
+        "}",
+        ".ktb-depositor-flex {",
+        "  display: flex;",
+        "  align-items: baseline;",
+        "  width: 100%;",
+        "  white-space: nowrap;",
+        "  gap: 1mm;",
+        "}",
+        ".ktb-dot-line {",
+        "  flex: 1;",
+        "  border-bottom: 1px dotted #000;",
+        "  height: 3.2mm;",
+        "  min-width: 15mm;",
+        "}",
+        ".ktb-dot-line.tel {",
+        "  flex: 0.7;",
+        "}",
+        ".ktb-bottom-row {",
+        "  display: flex;",
+        "  align-items: flex-start;",
+        "  justify-content: space-between;",
+        "  gap: 3mm;",
+        "}",
+        ".ktb-barcode-col {",
+        "  flex: 1;",
+        "  min-width: 0;",
+        "}",
+        ".ktb-barcode-svg {",
+        "  width: 100%;",
+        "  max-width: 112mm;",
+        "  height: 12mm;",
+        "  display: block;",
+        "}",
+        ".ktb-barcode-num {",
+        "  font-size: 8.4pt;",
+        "  letter-spacing: 0.2px;",
+        "  margin-top: 0.4mm;",
+        "  margin-bottom: 0.8mm;",
+        "  font-family: 'Sarabun', monospace;",
+        "  white-space: nowrap;",
+        "}",
+        ".ktb-footnote {",
+        "  font-size: 7.5pt;",
+        "  line-height: 1.22;",
+        "  color: #111;",
+        "}",
+        ".ktb-qr-col {",
+        "  width: 23mm;",
+        "  flex-shrink: 0;",
+        "  display: flex;",
+        "  justify-content: center;",
+        "  align-items: center;",
+        "}",
+        ".ktb-qr-img {",
+        "  width: 22mm;",
+        "  height: 22mm;",
+        "  border: 1px solid #000;",
+        "  padding: 0.5mm;",
+        "  background: #fff;",
+        "  display: block;",
+        "}",
+        ".ktb-notice-col {",
+        "  width: 42mm;",
+        "  flex-shrink: 0;",
+        "  display: flex;",
+        "  flex-direction: column;",
+        "  align-items: flex-end;",
+        "  gap: 1.5mm;",
+        "}",
+        ".ktb-warning-box {",
+        "  width: 100%;",
+        "  border: 1px solid #000;",
+        "  padding: 1.6mm 2mm;",
+        "  text-align: center;",
+        "  font-size: 8.4pt;",
+        "  line-height: 1.25;",
+        "}",
+        ".ktb-channel-icons {",
+        "  display: flex;",
+        "  align-items: center;",
+        "  justify-content: flex-end;",
+        "  gap: 1.2mm;",
+        "}",
+        ".ktb-ch-badge {",
+        "  display: inline-flex;",
+        "  align-items: center;",
+        "  justify-content: center;",
+        "  width: 4.5mm;",
+        "  height: 4.5mm;",
+        "  border-radius: 50%;",
+        "  background: #333;",
+        "  color: #fff;",
+        "  font-size: 5.5pt;",
+        "  font-weight: 700;",
+        "}",
 
         // === PAGE 2: ซองจดหมาย ===
         ".page2 {",
@@ -92,7 +413,7 @@ function buildDebtLetterCSS() {
     ].join('\n');
 }
 
-function buildDebtLetterPages(d, year) {
+function buildDebtLetterPages(d, year, barcodeQueue) {
     var settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
     var cfg = DEBT_LETTER_CONFIG;
     var orgName = settings.org_name || cfg.orgName;
@@ -142,26 +463,37 @@ function buildDebtLetterPages(d, year) {
     var thaiDate = now.getDate() + ' ' + thaiMonthNames[now.getMonth()] + ' ' + (now.getFullYear() + 543);
     var docYear = String(now.getFullYear() + 543);
     var docNo = settings.doc_invoice_no || ('ทม.บป.' + String(Math.floor(Math.random()*9000)+1000) + '/' + docYear.substring(2));
-    var unpaidList = d.unpaid_months.join(', ');
+    var unpaidList = '';
+    if (Array.isArray(d.unpaid_months) && d.unpaid_months.length > 1) {
+        unpaidList = d.unpaid_months[0] + ' - ' + d.unpaid_months[d.unpaid_months.length - 1];
+    } else if (Array.isArray(d.unpaid_months) && d.unpaid_months.length === 1) {
+        unpaidList = d.unpaid_months[0];
+    }
     var feeText = formatMoney(d.fee);
-    var totalText = formatMoney(d.total_debt);
+    var totalDebtNum = parseFloat(d.total_debt) || 0;
+    var totalText = formatMoney(totalDebtNum);
+    var totalDecimalText = totalDebtNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '-';
+    var thaiBahtText = debtLetterNumberToThaiBahtText(totalDebtNum);
     var monthCount = d.unpaid_count;
     var stampNo = settings.env_license_no || (String(Math.floor(Math.random()*900)+100) + '/' + docYear.substring(2) + String(parseInt(docYear.substring(2))+1));
 
     // ลายเซ็น
     var signatureHTML = '';
     if (settings.mayor_signature) {
-        signatureHTML = '<img src="' + settings.mayor_signature + '" style="height:15mm; display:block; margin:0 auto 2mm;">';
+        signatureHTML = '<img src="' + settings.mayor_signature + '" style="height:10mm; display:block; margin:0 auto 1mm;">';
     } else {
-        signatureHTML = '<div style="height:15mm;"></div>';
+        signatureHTML = '<div style="height:9mm;"></div>';
     }
 
-        var qrCodeHTML = '';
-        if (settings.qr_code) {
-            qrCodeHTML = '<img src="' + settings.qr_code + '" class="qr-code-img" alt="QR Code">';
-        } else {
-            qrCodeHTML = '<div class="qr-code-img" style="display:flex;align-items:center;justify-content:center;font-size:8pt;color:#999;text-align:center;">ยังไม่ได้ตั้งค่า<br>QR Code</div>';
-        }
+    // ข้อมูล Comcode, Ref1, Ref2, Barcode, QR Code
+    var comcodeInfo = buildDebtLetterComcodeData(d, settings);
+    var uniqueId = 'debt_bc_' + String(d.id).replace(/\W/g, '') + '_' + Math.floor(Math.random() * 100000);
+    if (Array.isArray(barcodeQueue)) {
+        barcodeQueue.push({
+            id: uniqueId,
+            data: comcodeInfo.barcodeData
+        });
+    }
 
     var displayOrgAddr = orgAddr;
     if (settings.org_province_name) {
@@ -182,7 +514,111 @@ function buildDebtLetterPages(d, year) {
         displayOrgAddr = addrParts.join(' ');
     }
 
-    // ============ PAGE 1: หนังสือราชการภายนอก ============
+    // โลโก้นกวายุภักษ์ ธนาคารกรุงไทย (Official Vector SVG)
+    var ktbLogoSvg =
+        '<div class="ktb-logo-box">' +
+            '<svg viewBox="0 0 128 128" width="26" height="26" xmlns="http://www.w3.org/2000/svg">' +
+                '<circle cx="64" cy="64" r="62" fill="#00A5E5"/>' +
+                '<g transform="matrix(1.12,0,0,-1.12,332.5,472.5)">' +
+                    '<path fill="#FFFFFF" d="M-220.1,336.6c0,0,0.6,1,0.9-0.4c0,0,0.6-8.1-4.1-13.1c-3.2-3.3-10.6-8-18.9-5.9c0,0,13.3,0.9,16.7,14.1l0.4,1.5C-225.3,332.8-222,333.7-220.1,336.6 M-189.8,377.4c0,0.2,0,0.3-0.1,0.5c0,0-0.2,0.8-0.7,2.2c-0.1,0.2-0.2,0.4-0.2,0.6l0,0c0,0.1-0.1,0.2-0.1,0.2c-0.9,2.1-2.6,5.1-5.5,8c0,0,3.1,0.2-0.3,4c0,0-5.6,6.6-16.5,11.7c-5.8,2.7-12.4,1.6-11.8-4.9c0.4-4.5-3.8-6.3-7.1-5.9c-3.9,0.5-6.3,3.7-5.6,6.3c0.7,2.8,2.1,5,4.3,6.7c1.5,1.2,2.5,2,5.2,2.5c1.6,0.3,3.8,0.9,4.4-1c1.1,0.6,3.1,4.4-3.4,4.4c0,0-1,2.1-3.2,1.7c0,0-6.5,6.4-13.8-1.5c0,0-2.8-1.1-3,0c0.6-0.5,1.7,1,0.3,1.6c-0.7,0.3-1.5-0.5-1.6-1.1c-0.1-0.5,0.1-1.7,1.5-1.9c0.4-0.1,1.1,0,1.1,0l-0.5-0.6c-2.2-0.9-4.2-0.2-4.6,1.3c0.5-0.3,1.1,0.1,1.2,0.6c0.2,0.6-0.2,1.4-1.1,1.5c-1.2,0.2-1.7-1.2-1.5-2.4c0.4-1.9,2.2-3.2,4.6-2.8l-0.4-0.6c0,0-2.4-3-4.3-6.4c-2-3.4-10.1-7.2-8.7,1c0.4,2.6-3.9,5.7-11.6,0.5c-4-2.8-9-7-12.8-13.8c0,0-1.6-2.6,1.1-2.7c0,0-5.5-2.6-5.8-15.1l0,0c0,0,0-0.5,0-1.2c0-0.4,0-0.9,0-1.3c0-1.4,0.1-3,0.2-3.9c0,0,0.6-7.5,1.9-8.8c0,0,0.1,0,0.2,0c0.4-0.3,0.9-0.4,1.6,0.3l0,0c0-0.1,1.7-8.5,5.1-15.6c2.8-5.6,7.9-13.8,5.9-15.8c-2-2-4.8,2-4.4,0.4c0.9-3.3,4.4-3.8,6.2-2.4c4.8,3.8-2.2,12.9-4.4,24.4c4.6,2,4.4,9.2,4.4,9.2s6.5,0.2,8.5,7.9c0,0,7.9-2.3,11.7,4.6c0,0,0,0,0,0.1l0.1,0.1c0.8-2.4,2.3-4.5,4.4-6.4c0,0-0.4-3.3-4.1-4.5c0,0-4.5,1.9-9.5,0c-4.5-1.8-2.7-6.6,0.6-5.4c-1,0.5-1.3,2.1,0.3,2.5c0.4-0.3,0.8-0.5,1.3-0.6l0,0c0.1,0,4-0.7,6.8,0.4c0.2,0.1,0.4,0.1,0.6,0.3h0.1l0,0c0.3,0.2,0.5,0.4,0.7,0.6c1-0.1,1.7-1.6,0.3-2.3c2.7-0.6,3.7,2.3,2.6,3.8c0,0,0.6,0.4,1.4,1c0,0,0.9,0.8,1.5,1.8c0,0,2.7-2.1,7.6-3.3c0,0-2.6-4.3-6.4-5.1c0,0-5.4,1.8-9.1-0.5c0,0-2-1.1-1.7-3.2c0.2-1.6,1.6-2.8,3.5-2.5c-0.8,0.4-2.6,2.4-0.3,3.3c0.4-0.6,0.9-1,1.6-1.1l0,0c0,0,3.4-0.8,7.6,1c0.2,0.1,0.3,0.1,0.5,0.2c0,0,0.1,0,0.2,0.1l0,0c0.3,0.2,0.5,0.4,0.6,0.6c1.1,0.2,2.6-0.3,2-2.4c1.3,0.2,3.4,2.5,0.3,4.4c0,0,1.8,0.9,3.3,2.2l2.2,2.2c4.3-0.6,7.5-4.7,7.5-9.7c0-4.1-3.5-8.9-7.2-9.9c0.1,0,0.3,0.1,0.4,0.1l-0.5-0.1h0.1c-0.6-0.1-1.2-0.2-2-0.2c-3.8,0.1-1.5,4.5-1.5,4.5c-0.6,0.1-1.2-0.1-1.7-0.7c-0.6-0.7-0.8-2-0.6-3.4c-0.2,0.1-0.4,0.1-0.5,0.2c-3.3,1.4-3.1,3.9-3.1,3.9c-0.9-0.4-1.5-1.5-1.2-3.4c0.5-2.5,3.7-3.6,6.3-3.9c1.5-1.5,3.9-3,9.4-2.1c0,0-2.4-12.8-18.6-12.2c0,0-4.9,1.8-4.7,5.9c0.2,5.5,4,7.4,4,7.4c-1.4,0.2-4.8-0.2-6.3-4.7c-0.7-2-0.5-5.4,1.3-7.7c-6.1,1.6-10.7,6.2-8.8,12.6c0.3,1,0.9,2,1.7,2.9c4.6,4.3,11.4,1.7,11.4,1.7c-0.3,1.5-2.2,3.5-5.6,3.7c-3.5,0.2-10.2-1.9-10.7-10c-0.5-7.4,4.2-12.8,15.9-14.5l0.2-0.1c0,0,7.1-5,17.1-2.3c0,0,20.2,4.1,15.9,27.2c0,0,4.7,15.4-5.2,24.1c6.1-5,13.6-2.1,13.6-2.1c-0.5-14,5.4-15.8,5.4-15.8l0.2,0.1c0,0-11.1-23.9-4.6-27c2.2-1,4.8-0.5,6.1,2.3c1.1,2.3-2.4-2.2-4.4-0.3c-2.4,2.4,0.6,8.1,3.5,14.2c4.1,8.2,6.8,14.3,7.3,18.4c0,0,0.6-0.4,1.3-0.1l0.1-0.1c1.6,0.4,2.6,7,2.8,8.1C-188.8,370-189.2,374.5-189.8,377.4"/>' +
+                '</g>' +
+            '</svg>' +
+            '<span class="ktb-logo-text">กรุงไทย</span>' +
+        '</div>';
+
+    // แบบฟอร์มการชำระเงินค่าธรรมเนียมขยะมูลฝอยผ่าน บมจ. ธนาคารกรุงไทย
+    var ktbPaymentFormHTML =
+        '<div class="ktb-payment-form">' +
+            '<div class="ktb-header-row">' +
+                '<div class="ktb-brand-left">' +
+                    ktbLogoSvg +
+                    '<div class="ktb-title-block">' +
+                        '<div>แบบฟอร์มการชำระเงินค่าธรรมเนียมขยะมูลฝอยผ่าน บมจ. ธนาคารกรุงไทย</div>' +
+                        '<div>ชำระให้' + orgName + '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="ktb-for-bank">(สำหรับธนาคาร)</div>' +
+            '</div>' +
+
+            '<div class="ktb-customer-line">' +
+                'ชื่อ <b>' + (d.name || '-') + '</b> (' + d.id + ') บ้านเลขที่ ' + (d.house_no || '-') + ' หมู่ที่ ' + (d.moo || '-') +
+            '</div>' +
+
+            '<table class="ktb-ref-table">' +
+                '<tr>' +
+                    '<td style="width: 40%;"><span class="ktb-ref-label-col1">Comp. Code :</span><span>&nbsp;' + comcodeInfo.compCode + '</span></td>' +
+                    '<td style="width: 34%;"><span class="ktb-ref-label-col2">รหัสอ้างอิง 1 :</span><span>&nbsp;' + comcodeInfo.ref1 + '</span></td>' +
+                    '<td style="width: 26%; text-align: right;">กำหนดชำระภายในวันที่ : &nbsp;&nbsp;' + comcodeInfo.dueDateStr + '</td>' +
+                '</tr>' +
+                '<tr>' +
+                    '<td><span class="ktb-ref-label-col1">Biller ID (ชำระธนาคารอื่น) :</span><span>&nbsp;' + comcodeInfo.billerId + '</span></td>' +
+                    '<td><span class="ktb-ref-label-col2">รหัสอ้างอิง 2 :</span><span>&nbsp;' + comcodeInfo.ref2 + '</span></td>' +
+                    '<td>&nbsp;</td>' +
+                '</tr>' +
+            '</table>' +
+
+            '<table class="ktb-table">' +
+                '<thead>' +
+                    '<tr>' +
+                        '<th style="width: 23%;">หมายเลขที่เช็ค/Cheque No</th>' +
+                        '<th style="width: 19%;">เช็คลงวันที่/Date</th>' +
+                        '<th style="width: 22%;">ชื่อธนาคาร/Bank Name</th>' +
+                        '<th style="width: 16%;">สาขา/Branch</th>' +
+                        '<th style="width: 20%;">บาท/Baht</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                    '<tr>' +
+                        '<td style="height: 5mm;">&nbsp;</td>' +
+                        '<td>&nbsp;</td>' +
+                        '<td>&nbsp;</td>' +
+                        '<td>&nbsp;</td>' +
+                        '<td rowspan="3" class="ktb-amount-cell">' + totalDecimalText + '</td>' +
+                    '</tr>' +
+                    '<tr>' +
+                        '<td class="ktb-nowrap"><span class="ktb-circle"></span>เงินโอน A/C Transfer</td>' +
+                        '<td class="ktb-nowrap">เลขที่บัญชี A/C No</td>' +
+                        '<td colspan="2">&nbsp;</td>' +
+                    '</tr>' +
+                    '<tr>' +
+                        '<td class="ktb-nowrap"><span class="ktb-circle"></span>เงินสด/Cash</td>' +
+                        '<td class="ktb-nowrap">จำนวนเงินเป็นตัวอักษร</td>' +
+                        '<td colspan="2" class="ktb-baht-text-cell">- ' + thaiBahtText + ' -</td>' +
+                    '</tr>' +
+                    '<tr class="ktb-depositor-row">' +
+                        '<td colspan="5">' +
+                            '<div class="ktb-depositor-flex">' +
+                                '<span>ชื่อผู้นำฝาก</span><span class="ktb-dot-line"></span>' +
+                                '<span>โทร</span><span class="ktb-dot-line tel"></span>' +
+                                '<span>เจ้าหน้าที่ธนาคารผู้รับเงิน</span><span class="ktb-dot-line"></span>' +
+                            '</div>' +
+                        '</td>' +
+                    '</tr>' +
+                '</tbody>' +
+            '</table>' +
+
+            '<div class="ktb-bottom-row">' +
+                '<div class="ktb-barcode-col">' +
+                    '<svg id="' + uniqueId + '" class="ktb-barcode-svg"></svg>' +
+                    '<div class="ktb-barcode-num">' + comcodeInfo.barcodeTextDisplay + '</div>' +
+                    '<div class="ktb-footnote">' +
+                        'หมายเหตุ สามารถชำระผ่านช่องทางสาขาธนาคาร เอทีเอ็ม อินเตอร์เน็ต Krungthai NEXT ของธนาคารกรุงไทย<br>' +
+                        'และช่องทางอิเล็กทรอนิกส์ของทุกธนาคารที่เข้าร่วมบริการ Cross Bank Bill Payment *ค่าธรรมเนียมขึ้นกับช่องทางการชำระ' +
+                    '</div>' +
+                '</div>' +
+                '<div class="ktb-qr-col">' +
+                    '<img id="qr_' + uniqueId + '" class="ktb-qr-img" src="' + comcodeInfo.qrFallbackUrl + '" alt="QR Code">' +
+                '</div>' +
+                '<div class="ktb-notice-col">' +
+                    '<div class="ktb-warning-box">' +
+                        '<u>ห้ามรับชำระเกินกำหนดเวลา</u><br>' +
+                        'และให้รับชำระเงินตามยอดที่ระบุเท่านั้น' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+    // ============ PAGE 1: หนังสือราชการภายนอก + แบบฟอร์มชำระเงิน ธ.กรุงไทย ============
     var page1 =
         '<div class="page">' +
 
@@ -217,9 +653,9 @@ function buildDebtLetterPages(d, year) {
         '<div class="body-text">' +
             orgName + ' จึงขอแจ้งมายังท่านให้ดำเนินการชำระค่าธรรมเนียมการให้' +
             'บริการเก็บขนและกำจัดสิ่งปฏิกูลหรือมูลฝอย ตั้งแต่เดือน <b>' + unpaidList + '</b> ' +
-            'จำนวน <b>' + monthCount + ' เดือน</b> เป็นจำนวนเงิน <b>' + totalText + ' บาท</b> ' +
+            'จำนวน <b>' + monthCount + ' เดือน</b> เป็นจำนวนเงิน <b>' + totalText + ' บาท (' + thaiBahtText + ')</b> ' +
             'อัตราค่าธรรมเนียมต่อเดือน <b>' + feeText + ' บาท</b> ชำระได้ที่' +
-            'งานจัดเก็บรายได้ กองคลัง ' + orgName + ' หรือตรวจสอบยอดและชำระผ่านช่องทาง QR CODE ด้านล่างนี้' +
+            'งานจัดเก็บรายได้ กองคลัง ' + orgName + ' หรือสแกนชำระผ่าน QR CODE / เคาน์เตอร์ธนาคารกรุงไทย ตามแบบฟอร์มด้านล่างนี้' +
         '</div>' +
 
         // วรรคสาม
@@ -239,21 +675,8 @@ function buildDebtLetterPages(d, year) {
 
         '</div>' + // end content-wrapper
 
-        // QR Code Section
-        '<div class="qr-section">' +
-            qrCodeHTML +
-            '<div>' +
-                '<div class="qr-text" style="margin-bottom: 2px;">' +
-                    '<span class="qr-text-icon">&larr;</span> สแกน QR CODE เพื่อตรวจสอบยอด / ชำระเงิน' +
-                '</div>' +
-            '</div>' +
-        '</div>' +
-
-        // ส่วนท้าย
-        '<div class="footer-section">' +
-            '<div class="dept">งานจัดเก็บรายได้ กองคลัง</div>' +
-            '<div class="dept-tel">' + orgTel + '</div>' +
-        '</div>' +
+        // แบบฟอร์มการชำระเงิน บมจ. ธนาคารกรุงไทย (ส่วนท้าย หน้าที่ 1)
+        ktbPaymentFormHTML +
 
         '</div>'; // end page
 
@@ -300,6 +723,65 @@ function buildDebtLetterPages(d, year) {
     return page1 + page2;
 }
 
+function openDebtLetterPrintWindow(pagesHTML, barcodeQueue) {
+    var css = buildDebtLetterCSS();
+    var noPrintDiv = '<div class="no-print"><button class="btn-print-action danger" onclick="window.close()">ปิดหน้านี้</button><button class="btn-print-action primary" onclick="window.print()">พิมพ์อีกครั้ง</button></div>';
+    var renderScript =
+        '<script>' +
+        'var barcodes = ' + JSON.stringify(barcodeQueue || []) + ';' +
+        'window.addEventListener("DOMContentLoaded", function() {' +
+            'barcodes.forEach(function(b) {' +
+                'var el = document.getElementById(b.id);' +
+                'if (el && typeof JsBarcode !== "undefined") {' +
+                    'try {' +
+                        'JsBarcode(el, b.data, {' +
+                            'format: "CODE128",' +
+                            'displayValue: false,' +
+                            'height: 44,' +
+                            'width: 1.25,' +
+                            'margin: 0' +
+                        '});' +
+                    '} catch (e) { console.error("Barcode error:", e); }' +
+                '}' +
+                'var qrEl = document.getElementById("qr_" + b.id);' +
+                'if (qrEl && typeof qrcode === "function") {' +
+                    'try {' +
+                        'var qr = qrcode(0, "M");' +
+                        'qr.addData(b.data);' +
+                        'qr.make();' +
+                        'qrEl.src = qr.createDataURL(4, 2);' +
+                    '} catch (e) { console.error("QR error:", e); }' +
+                '}' +
+            '});' +
+            'var imgs = Array.prototype.slice.call(document.images);' +
+            'var promises = imgs.map(function(img) {' +
+                'if (img.complete) return Promise.resolve();' +
+                'return new Promise(function(resolve) { img.onload = resolve; img.onerror = resolve; });' +
+            '});' +
+            'Promise.all(promises).then(function() {' +
+                'setTimeout(function() { window.print(); }, 350);' +
+            '});' +
+        '});' +
+        '<\/script>';
+
+    var html =
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+        '<title>หนังสือแจ้งเตือนให้ชำระค่าธรรมเนียมขยะมูลฝอย</title>' +
+        '<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>' +
+        '<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"><\/script>' +
+        '<style>' + css + '</style></head><body>' +
+        noPrintDiv + pagesHTML + renderScript +
+        '</body></html>';
+
+    var w = window.open('', '_blank', 'width=950,height=1200');
+    if (!w) {
+        if (typeof showToast === 'function') showToast('กรุณาอนุญาตป๊อปอัปเพื่อพิมพ์หนังสือทวงหนี้', 'warning');
+        return;
+    }
+    w.document.write(html);
+    w.document.close();
+}
+
 // พิมพ์ทวงหนี้รายบุคคล
 async function printDebtLetter(customerId) {
     var year = (typeof debtorSelectedYear !== 'undefined' && debtorSelectedYear) ? debtorSelectedYear : getCurrentFiscalYear();
@@ -324,15 +806,9 @@ async function printDebtLetter(customerId) {
         }
     }
 
-    var css = buildDebtLetterCSS();
-    var pages = buildDebtLetterPages(d, year);
-    var noPrintDiv = '<div class="no-print"><button class="btn-print-action danger" onclick="window.close()">ปิดหน้านี้</button><button class="btn-print-action primary" onclick="window.print()">พิมพ์อีกครั้ง</button></div>';
-    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>' + css + '</style></head><body>' + noPrintDiv + pages + '</body></html>';
-
-    var w = window.open('', '_blank', 'width=900,height=1200');
-    w.document.write(html);
-    w.document.close();
-    setTimeout(function(){ w.print(); }, 600);
+    var barcodeQueue = [];
+    var pages = buildDebtLetterPages(d, year, barcodeQueue);
+    openDebtLetterPrintWindow(pages, barcodeQueue);
 }
 
 // พิมพ์ทวงหนี้ทั้งหมด
@@ -381,18 +857,13 @@ async function printAllDebtLetters() {
             
             Swal.close();
 
-            var css = buildDebtLetterCSS();
+            var barcodeQueue = [];
             var allPages = '';
             debtors.forEach(function(d) {
-                allPages += buildDebtLetterPages(d, year);
+                allPages += buildDebtLetterPages(d, year, barcodeQueue);
             });
-            var noPrintDiv = '<div class="no-print"><button class="btn-print-action danger" onclick="window.close()">ปิดหน้านี้</button><button class="btn-print-action primary" onclick="window.print()">พิมพ์อีกครั้ง</button></div>';
-            var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>' + css + '</style></head><body>' + noPrintDiv + allPages + '</body></html>';
-
-            var w = window.open('', '_blank', 'width=900,height=1200');
-            w.document.write(html);
-            w.document.close();
-            setTimeout(function(){ w.print(); }, 800);
+            openDebtLetterPrintWindow(allPages, barcodeQueue);
         }
     });
 }
+

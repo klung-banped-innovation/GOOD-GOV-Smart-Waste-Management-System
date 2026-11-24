@@ -241,11 +241,32 @@ function saveWasteData(key, data) {
 // Global state for caching when using Supabase
 let stateFeeTypes = null;
 let stateCustomers = null;
+let stateCustomersMap = null;
 let statePayments = null;
 let stateMonthlyStatus = null;
 let stateStaff = null;
 let stateRegisterReqs = null;
 let stateCancelReqs = null;
+
+function rebuildCustomersMap(list) {
+    stateCustomersMap = new Map();
+    if (Array.isArray(list)) {
+        for (let i = 0; i < list.length; i++) {
+            const c = list[i];
+            if (c && c.id) stateCustomersMap.set(c.id, c);
+        }
+    }
+}
+
+function getCustomerByIdFast(customerId) {
+    if (!stateCustomersMap && stateCustomers) {
+        rebuildCustomersMap(stateCustomers);
+    }
+    if (stateCustomersMap) {
+        return stateCustomersMap.get(customerId);
+    }
+    return getWasteCustomers().find(c => c.id === customerId);
+}
 
 // Helper for fetching more than 1000 rows
 async function fetchAllFromSupabase(table, orderCol = 'id', ascending = true) {
@@ -323,12 +344,14 @@ async function fetchWasteCustomers() {
 
         if (!error && data) {
             stateCustomers = data;
+            rebuildCustomersMap(stateCustomers);
             return data;
         } else {
             console.warn('Supabase fetch customers error, falling back to local storage', error);
         }
     }
     stateCustomers = getWasteData('customers');
+    rebuildCustomersMap(stateCustomers);
     return stateCustomers;
 }
 
@@ -342,20 +365,46 @@ function getWasteCustomers() {
 // FEE HISTORY — ประวัติการเปลี่ยนแปลงค่าธรรมเนียม
 // ============================================
 let stateFeeHistory = null;
+let stateFeeHistoryByCustomer = null;
+
+function rebuildFeeHistoryMap(list) {
+    stateFeeHistoryByCustomer = new Map();
+    if (Array.isArray(list)) {
+        for (let i = 0; i < list.length; i++) {
+            const h = list[i];
+            if (!h || !h.customer_id) continue;
+            let arr = stateFeeHistoryByCustomer.get(h.customer_id);
+            if (!arr) {
+                arr = [];
+                stateFeeHistoryByCustomer.set(h.customer_id, arr);
+            }
+            arr.push(h);
+        }
+    }
+}
+
 async function fetchWasteFeeHistory() {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         const { data, error } = await fetchAllFromSupabase('waste_fee_history', 'change_date', false);
         if (!error && data) {
             stateFeeHistory = data;
+            rebuildFeeHistoryMap(stateFeeHistory);
             return;
         }
     }
     stateFeeHistory = getWasteData('feeHistory');
+    rebuildFeeHistoryMap(stateFeeHistory);
 }
 
 function getFeeHistory(customerId) {
     let all = stateFeeHistory !== null ? stateFeeHistory : getWasteData('feeHistory');
     if (!customerId) return all;
+    if (!stateFeeHistoryByCustomer && all) {
+        rebuildFeeHistoryMap(all);
+    }
+    if (stateFeeHistoryByCustomer) {
+        return stateFeeHistoryByCustomer.get(customerId) || [];
+    }
     return all.filter(h => h.customer_id === customerId);
 }
 
@@ -392,7 +441,10 @@ function addFeeHistoryEntry(customerId, oldFee, newFee, changeDate) {
     const all = getWasteData('feeHistory');
     all.push(entry);
     saveWasteData('feeHistory', all);
-    if (stateFeeHistory) stateFeeHistory.push(entry);
+    if (stateFeeHistory) {
+        stateFeeHistory.push(entry);
+        rebuildFeeHistoryMap(stateFeeHistory);
+    }
     return entry;
 }
 
@@ -403,7 +455,7 @@ function addFeeHistoryEntry(customerId, oldFee, newFee, changeDate) {
  * - ถ้ามี history → คำนวณจาก chain ของการเปลี่ยนแปลง
  */
 function getFeeForMonth(customerId, monthKey, fiscalYear) {
-    const customer = getWasteCustomers().find(c => c.id === customerId);
+    const customer = getCustomerByIdFast(customerId);
     if (!customer) return 0;
 
     const history = getFeeHistory(customerId);

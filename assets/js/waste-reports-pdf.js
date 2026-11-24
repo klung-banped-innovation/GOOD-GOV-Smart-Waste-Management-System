@@ -118,6 +118,13 @@ function calculatePaymentCategories(paymentDate, monthsPaid, feePerMonth, totalA
     return { debt: debt, regular: regular, advance: advance };
 }
 
+function formatPaymentMethodPDF(method) {
+    if (!method) return '-';
+    var m = String(method).trim();
+    if (m === 'โอน') return 'เงินโอน';
+    return m;
+}
+
 function exportDailyPDF() {
     const orgName = getOrgNamePDF();
     var filterDate = document.getElementById('filterDate').value;
@@ -134,7 +141,7 @@ function exportDailyPDF() {
     var sumDebt = 0, sumRegular = 0, sumAdvance = 0, sumTotal = 0;
 
     if (todayPayments.length === 0) {
-        rowsHtml = '<tr><td colspan="9" class="text-center" style="padding:30px;color:#999;">ไม่มีรายการชำระสำหรับวันที่เลือก</td></tr>';
+        rowsHtml = '<tr><td colspan="10" class="text-center" style="padding:30px;color:#999;">ไม่มีรายการชำระสำหรับวันที่เลือก</td></tr>';
     } else {
         todayPayments.forEach(function(p, idx) {
             var cust = customers.find(function(c){ return c.id === p.customer_id; });
@@ -163,6 +170,7 @@ function exportDailyPDF() {
                 '<td class="text-right">' + fmtMoneyPDF(debtAmt) + '</td>' +
                 '<td class="text-right">' + fmtMoneyPDF(regularAmt) + '</td>' +
                 '<td class="text-right">' + fmtMoneyPDF(advanceAmt) + '</td>' +
+                '<td class="text-center">' + formatPaymentMethodPDF(p.method) + '</td>' +
                 '<td class="text-right fw-bold">' + fmtMoneyPDF(rowTotal) + '</td>' +
                 '</tr>';
         });
@@ -173,6 +181,7 @@ function exportDailyPDF() {
             '<td class="text-right">' + fmtMoneyPDF(sumDebt) + '</td>' +
             '<td class="text-right">' + fmtMoneyPDF(sumRegular) + '</td>' +
             '<td class="text-right">' + fmtMoneyPDF(sumAdvance) + '</td>' +
+            '<td></td>' +
             '<td class="text-right fw-bold">' + fmtMoneyPDF(sumTotal) + '</td>' +
             '</tr>';
     }
@@ -191,7 +200,7 @@ function exportDailyPDF() {
         '<table>' +
         '<thead><tr>' +
         '<th>ลำดับ</th><th>เลขที่ใบเสร็จ</th><th>ชื่อลูกค้า</th><th>บ้านเลขที่</th><th>หมู่ที่</th>' +
-        '<th>รับชำระลูก<br>หนี้</th><th>รับปกติ</th><th>รับล่วงหน้า</th><th>รวม</th>' +
+        '<th>รับชำระลูก<br>หนี้</th><th>รับปกติ</th><th>รับล่วงหน้า</th><th>วิธีชำระ</th><th>รวม</th>' +
         '</tr></thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
         `</table>` +
@@ -305,7 +314,7 @@ function exportAllPDF() {
     var sumDebt = 0, sumRegular = 0, sumAdvance = 0, sumTotal = 0;
 
     if (allPayments.length === 0) {
-        rowsHtml = '<tr><td colspan="10" class="text-center" style="padding:30px;color:#999;">ไม่มีรายการชำระในระบบ</td></tr>';
+        rowsHtml = '<tr><td colspan="11" class="text-center" style="padding:30px;color:#999;">ไม่มีรายการชำระในระบบ</td></tr>';
     } else {
         allPayments.forEach(function(p, idx) {
             var cust = customers.find(function(c){ return c.id === p.customer_id; });
@@ -335,6 +344,7 @@ function exportAllPDF() {
                 '<td class="text-right">' + fmtMoneyPDF(debtAmt) + '</td>' +
                 '<td class="text-right">' + fmtMoneyPDF(regularAmt) + '</td>' +
                 '<td class="text-right">' + fmtMoneyPDF(advanceAmt) + '</td>' +
+                '<td class="text-center">' + formatPaymentMethodPDF(p.method) + '</td>' +
                 '<td class="text-right fw-bold">' + fmtMoneyPDF(rowTotal) + '</td>' +
                 '</tr>';
         });
@@ -345,6 +355,7 @@ function exportAllPDF() {
             '<td class="text-right">' + fmtMoneyPDF(sumDebt) + '</td>' +
             '<td class="text-right">' + fmtMoneyPDF(sumRegular) + '</td>' +
             '<td class="text-right">' + fmtMoneyPDF(sumAdvance) + '</td>' +
+            '<td></td>' +
             '<td class="text-right fw-bold">' + fmtMoneyPDF(sumTotal) + '</td>' +
             '</tr>';
     }
@@ -362,7 +373,7 @@ function exportAllPDF() {
         '<table>' +
         '<thead><tr>' +
         '<th>ลำดับ</th><th>วันที่</th><th>เลขที่ใบเสร็จ</th><th>ชื่อลูกค้า</th><th>บ้านเลขที่</th><th>หมู่ที่</th>' +
-        '<th>รับชำระลูก<br>หนี้</th><th>รับปกติ</th><th>รับล่วงหน้า</th><th>รวม</th>' +
+        '<th>รับชำระลูก<br>หนี้</th><th>รับปกติ</th><th>รับล่วงหน้า</th><th>วิธีชำระ</th><th>รวม</th>' +
         '</tr></thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
         `</table>` +
