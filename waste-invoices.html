@@ -82,18 +82,22 @@
         <!-- ตั้งค่าข้อมูลสำหรับออกใบแจ้งหนี้ -->
         <div class="card mb-3 border-primary border-opacity-25 shadow-sm">
             <div class="card-header bg-primary bg-opacity-10 border-0 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span class="fw-bold text-primary text-sm"><i class="fa-solid fa-sliders me-2"></i>ตั้งค่าข้อมูลใบแจ้งหนี้และงวดเดือนที่ออกรายงาน</span>
+                <span class="fw-bold text-primary text-sm"><i class="fa-solid fa-sliders me-2"></i>ตั้งค่าข้อมูลใบแจ้งหนี้และงวดเดือน/ปีงบประมาณที่ออกรายงาน (รองรับย้อนหลังและล่วงหน้า)</span>
                 <span class="badge bg-white text-primary border border-primary border-opacity-25">ดึง Barcode & QR Code (Comcode) อัตโนมัติ</span>
             </div>
             <div class="card-body py-3">
                 <div class="row g-2 align-items-end">
                     <div class="col-6 col-md-2">
-                        <label class="form-label text-xs fw-semibold mb-1">ปีงบประมาณ</label>
-                        <select class="form-select form-select-sm fw-bold text-primary" id="filterFiscalYear" onchange="renderTable()"></select>
+                        <label class="form-label text-xs fw-semibold mb-1">ตั้งแต่ปีงบประมาณ</label>
+                        <select class="form-select form-select-sm fw-bold text-primary" id="filterStartFiscalYear" onchange="onInvoicePeriodChange('startYear')"></select>
                     </div>
                     <div class="col-6 col-md-2">
-                        <label class="form-label text-xs fw-semibold mb-1">เดือนที่ออกใบแจ้งหนี้</label>
-                        <select class="form-select form-select-sm fw-bold text-success" id="filterMonth" onchange="renderTable()">
+                        <label class="form-label text-xs fw-semibold mb-1">ถึงปีงบประมาณ</label>
+                        <select class="form-select form-select-sm fw-bold text-primary" id="filterFiscalYear" onchange="onInvoicePeriodChange('endYear')"></select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-xs fw-semibold mb-1">ตั้งแต่เดือน</label>
+                        <select class="form-select form-select-sm fw-bold text-success" id="filterStartMonth" onchange="onInvoicePeriodChange('startMonth')">
                             <option value="oct">ตุลาคม</option>
                             <option value="nov">พฤศจิกายน</option>
                             <option value="dec">ธันวาคม</option>
@@ -108,39 +112,57 @@
                             <option value="sep">กันยายน</option>
                         </select>
                     </div>
-                    <div class="col-12 col-md-3">
-                        <label class="form-label text-xs fw-semibold mb-1">การคำนวณยอดเงินในใบแจ้งหนี้</label>
-                        <select class="form-select form-select-sm" id="invoiceCalcMode" onchange="renderTable()">
-                            <option value="single" selected>เฉพาะเดือนที่เลือก (1 เดือน)</option>
-                            <option value="cumulative">รวมยอดค้างชำระถึงเดือนที่เลือก</option>
-                            <option value="all_year">รวมยอดค้างชำระทั้งปีงบประมาณ</option>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-xs fw-semibold mb-1">ถึงเดือนที่ออกใบแจ้งหนี้</label>
+                        <select class="form-select form-select-sm fw-bold text-success" id="filterMonth" onchange="onInvoicePeriodChange('endMonth')">
+                            <option value="oct">ตุลาคม</option>
+                            <option value="nov">พฤศจิกายน</option>
+                            <option value="dec">ธันวาคม</option>
+                            <option value="jan">มกราคม</option>
+                            <option value="feb">กุมภาพันธ์</option>
+                            <option value="mar">มีนาคม</option>
+                            <option value="apr">เมษายน</option>
+                            <option value="may">พฤษภาคม</option>
+                            <option value="jun">มิถุนายน</option>
+                            <option value="jul">กรกฎาคม</option>
+                            <option value="aug">สิงหาคม</option>
+                            <option value="sep">กันยายน</option>
                         </select>
                     </div>
-                    <div class="col-6 col-md-2">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label text-xs fw-semibold mb-1">การคำนวณยอดเงินในใบแจ้งหนี้</label>
+                        <select class="form-select form-select-sm" id="invoiceCalcMode" onchange="onInvoiceCalcModeChange()">
+                            <option value="range">ตามช่วงเดือนและช่วงปีงบประมาณที่เลือก</option>
+                            <option value="single" selected>เฉพาะเดือนที่เลือก (1 เดือน)</option>
+                            <option value="cumulative">รวมยอดค้างชำระถึงเดือน/ปีที่เลือก</option>
+                            <option value="all_year">รวมยอดค้างชำระทั้งปีงบประมาณที่เลือก</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2 mt-2">
                         <label class="form-label text-xs fw-semibold mb-1">วันที่ออกใบแจ้งหนี้</label>
                         <input type="date" class="form-control form-control-sm" id="invoiceIssueDate">
                     </div>
-                    <div class="col-6 col-md-2">
+                    <div class="col-6 col-md-2 mt-2">
                         <label class="form-label text-xs fw-semibold mb-1">ชำระภายในวันที่</label>
                         <input type="date" class="form-control form-control-sm" id="invoiceDueDate">
                     </div>
-                    <div class="col-6 col-md-1">
+                    <div class="col-6 col-md-2 mt-2">
                         <label class="form-label text-xs fw-semibold mb-1">ขนาดพิมพ์</label>
                         <select class="form-select form-select-sm" id="invoicePerPage" title="จำนวนใบแจ้งหนี้ต่อกระดาษ A4">
                             <option value="1">1 ใบ/A4</option>
                             <option value="2">2 ใบ/A4</option>
                         </select>
                     </div>
-                    <div class="col-12 col-md-4 mt-2">
+                    <div class="col-6 col-md-3 mt-2">
                         <label class="form-label text-xs fw-semibold mb-1">ชื่อพนักงานผู้ทำรายการ (ท้ายใบแจ้งหนี้)</label>
                         <input type="text" class="form-control form-control-sm" id="invoiceStaffName" placeholder="ชื่อ-นามสกุล พนักงานผู้ทำรายการ">
                     </div>
-                    <div class="col-12 col-md-8 mt-2 d-flex justify-content-end gap-2">
+                    <div class="col-12 col-md-3 mt-2 d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="previewFirstFilteredInvoice()">
                             <i class="fa-solid fa-eye me-1"></i>ดูตัวอย่างใบแจ้งหนี้
                         </button>
                         <button type="button" class="btn btn-sm btn-success fw-semibold" onclick="printFilteredInvoices()">
-                            <i class="fa-solid fa-file-invoice me-1"></i>พิมพ์ใบแจ้งหนี้ตามตัวกรองทั้งหมด
+                            <i class="fa-solid fa-file-invoice me-1"></i>พิมพ์ใบแจ้งหนี้ทั้งหมด
                         </button>
                     </div>
                 </div>
@@ -348,8 +370,12 @@ function initDefaultInvoiceDatesAndStaff() {
     const calMonth = now.getMonth(); // 0=Jan .. 9=Oct
     const fyIdx = calMonth >= 9 ? calMonth - 9 : calMonth + 3;
     const monthEl = document.getElementById('filterMonth');
+    const startMonthEl = document.getElementById('filterStartMonth');
     if (monthEl && INV_MONTH_KEYS[fyIdx]) {
         monthEl.value = INV_MONTH_KEYS[fyIdx];
+    }
+    if (startMonthEl && INV_MONTH_KEYS[fyIdx]) {
+        startMonthEl.value = INV_MONTH_KEYS[fyIdx];
     }
 }
 
@@ -377,20 +403,36 @@ function populateDropdowns() {
     document.getElementById('filterType').innerHTML = typeOpts;
     document.getElementById('fType').innerHTML = fTypeOpts;
 
-    // 3. ปีงบประมาณ
+    // 3. ปีงบประมาณ (รองรับย้อนหลัง 2-3 ปี, ปีปัจจุบัน, และปีล่วงหน้า 1 ปี)
     const ms = getMonthlyStatus();
     const cy = getCurrentFiscalYear();
     const cyNum = parseInt(cy, 10);
-    const yearSet = new Set([String(cyNum - 1), cy, String(cyNum + 1)]);
+    const maxAllowedYear = cyNum + 1;
+    const minDefaultYear = cyNum - 2;
+
+    const yearSet = new Set();
+    for (let y = minDefaultYear; y <= maxAllowedYear; y++) {
+        yearSet.add(String(y));
+    }
+
     Object.values(ms).forEach(customerYears => {
-        Object.keys(customerYears).forEach(y => yearSet.add(String(y)));
+        Object.keys(customerYears).forEach(y => {
+            const yNum = parseInt(y, 10);
+            if (!isNaN(yNum) && yNum >= 2565 && yNum <= maxAllowedYear) {
+                const monthObj = customerYears[y] || {};
+                const hasRealRecord = Object.values(monthObj).some(st => st === 'paid' || st === 'pending');
+                if (hasRealRecord) yearSet.add(String(yNum));
+            }
+        });
     });
-    const customYears = getWasteData('customYears');
-    if (Array.isArray(customYears)) customYears.forEach(y => yearSet.add(String(y)));
 
     const sortedYears = Array.from(yearSet).sort((a, b) => Number(b) - Number(a));
+    const yearOptsHtml = sortedYears.map(y => `<option value="${y}" ${y === cy ? 'selected' : ''}>ปีงบฯ ${y}</option>`).join('');
+
+    const startFySelect = document.getElementById('filterStartFiscalYear');
     const fySelect = document.getElementById('filterFiscalYear');
-    fySelect.innerHTML = sortedYears.map(y => `<option value="${y}" ${y === cy ? 'selected' : ''}>ปีงบฯ ${y}</option>`).join('');
+    if (startFySelect) startFySelect.innerHTML = yearOptsHtml;
+    if (fySelect) fySelect.innerHTML = yearOptsHtml;
 
     // 4. ตำบลจากการตั้งค่า
     try {
@@ -404,10 +446,83 @@ function populateDropdowns() {
     } catch (e) {}
 }
 
+function onInvoicePeriodChange(changedField) {
+    const startFyEl = document.getElementById('filterStartFiscalYear');
+    const endFyEl = document.getElementById('filterFiscalYear');
+    const startMEl = document.getElementById('filterStartMonth');
+    const endMEl = document.getElementById('filterMonth');
+    const modeEl = document.getElementById('invoiceCalcMode');
+
+    let sFy = parseInt(startFyEl.value, 10);
+    let eFy = parseInt(endFyEl.value, 10);
+    if (changedField === 'startYear' && sFy > eFy) {
+        endFyEl.value = String(sFy);
+        eFy = sFy;
+    } else if (changedField === 'endYear' && eFy < sFy) {
+        startFyEl.value = String(eFy);
+        sFy = eFy;
+    }
+
+    const sMIdx = INV_MONTH_KEYS.indexOf(startMEl.value);
+    const eMIdx = INV_MONTH_KEYS.indexOf(endMEl.value);
+
+    if (sFy === eFy && sMIdx > eMIdx) {
+        if (changedField === 'startMonth') {
+            endMEl.value = startMEl.value;
+        } else {
+            startMEl.value = endMEl.value;
+        }
+    }
+
+    // หากผู้ใช้เปลี่ยนปีเริ่มต้นหรือเดือนเริ่มต้น ให้สลับโหมดเป็น "ตามช่วงเดือนและช่วงปีงบประมาณที่เลือก" อัตโนมัติ
+    if ((changedField === 'startYear' || changedField === 'startMonth') && (sFy !== eFy || startMEl.value !== endMEl.value)) {
+        if (modeEl && modeEl.value === 'single') {
+            modeEl.value = 'range';
+        }
+    } else if (changedField === 'endYear' && sFy !== eFy && modeEl && modeEl.value === 'single') {
+        modeEl.value = 'range';
+    } else if (changedField === 'endMonth' && modeEl && modeEl.value === 'single' && sFy === eFy) {
+        startMEl.value = endMEl.value;
+    }
+
+    currentPage = 1;
+    renderTable();
+}
+
+function onInvoiceCalcModeChange() {
+    const mode = document.getElementById('invoiceCalcMode').value;
+    const startFyEl = document.getElementById('filterStartFiscalYear');
+    const endFyEl = document.getElementById('filterFiscalYear');
+    const startMEl = document.getElementById('filterStartMonth');
+    const endMEl = document.getElementById('filterMonth');
+
+    if (mode === 'single') {
+        startFyEl.value = endFyEl.value;
+        startMEl.value = endMEl.value;
+    } else if (mode === 'cumulative') {
+        startMEl.value = 'oct';
+    } else if (mode === 'all_year') {
+        startMEl.value = 'oct';
+        endMEl.value = 'sep';
+    }
+
+    currentPage = 1;
+    renderTable();
+}
+
 function getInvoiceOptionsFromUI() {
+    const cy = getCurrentFiscalYear();
+    const startFY = document.getElementById('filterStartFiscalYear')?.value || cy;
+    const endFY = document.getElementById('filterFiscalYear')?.value || cy;
+    const startMonth = document.getElementById('filterStartMonth')?.value || 'oct';
+    const endMonth = document.getElementById('filterMonth')?.value || 'oct';
     return {
-        fiscalYear: document.getElementById('filterFiscalYear').value || getCurrentFiscalYear(),
-        monthKey: document.getElementById('filterMonth').value || 'oct',
+        startFiscalYear: startFY,
+        endFiscalYear: endFY,
+        fiscalYear: endFY,
+        startMonthKey: startMonth,
+        endMonthKey: endMonth,
+        monthKey: endMonth,
         calcMode: document.getElementById('invoiceCalcMode').value || 'single',
         issueDate: document.getElementById('invoiceIssueDate').value,
         dueDate: document.getElementById('invoiceDueDate').value,
@@ -458,11 +573,10 @@ function getFiltered(ignoreMooFilter = false) {
     }
 
     if (payStatus) {
-        const ms = getMonthlyStatus();
         data = data.filter(c => {
-            const st = ((ms[c.id] || {})[opts.fiscalYear] || {})[opts.monthKey] || 'unpaid';
-            if (payStatus === 'paid') return st === 'paid';
-            if (payStatus === 'unpaid') return st !== 'paid' && st !== 'exempted';
+            const inv = calculateCustomerInvoiceData(c, opts);
+            if (payStatus === 'paid') return inv.unpaidMonthsList.length === 0;
+            if (payStatus === 'unpaid') return inv.unpaidMonthsList.length > 0;
             return true;
         });
     }
@@ -573,7 +687,7 @@ function renderTable() {
 
     const tbody = document.getElementById('customerTableBody');
     tbody.innerHTML = pageData.length ? pageData.map(c => {
-        const inv = calculateCustomerInvoiceData(c, opts.fiscalYear, opts.monthKey, opts.calcMode);
+        const inv = calculateCustomerInvoiceData(c, opts);
         const isPaid = inv.unpaidMonthsList.length === 0;
         const unpaidMonthsText = !isPaid ? inv.unpaidMonthsList.join(', ') : 'ชำระแล้ว';
 
@@ -597,7 +711,7 @@ function renderTable() {
             </td>
             <td class="text-end">
                 <div class="fw-bold ${inv.totalAmount > 0 ? 'text-danger' : 'text-success'}">฿${formatMoneyDecimal(inv.totalAmount)}</div>
-                <div class="text-xs ${isPaid ? 'text-success fw-bold' : 'text-muted'} text-truncate" style="max-width: 140px;" title="${unpaidMonthsText}">${unpaidMonthsText}</div>
+                <div class="text-xs ${isPaid ? 'text-success fw-bold' : 'text-muted'} text-truncate" style="max-width: 160px;" title="${unpaidMonthsText}">${unpaidMonthsText}</div>
             </td>
             <td>
                 <select class="form-select form-select-sm text-xs ${c.status === 'active' ? 'text-success fw-bold' : c.status === 'exempt' ? 'text-warning fw-bold' : 'text-danger'}" style="width: 115px;" onchange="updateCustomerStatus('${c.id}', this.value)">
@@ -683,7 +797,7 @@ function previewSingleInvoice(customerId) {
     const c = getWasteCustomers().find(x => x.id === customerId);
     if (!c) return;
     const opts = getInvoiceOptionsFromUI();
-    const invData = calculateCustomerInvoiceData(c, opts.fiscalYear, opts.monthKey, opts.calcMode);
+    const invData = calculateCustomerInvoiceData(c, opts);
 
     // Inject preview CSS if not already injected
     let styleEl = document.getElementById('invoicePreviewDynamicStyle');
@@ -732,7 +846,7 @@ function printSingleInvoice(customerId) {
     const c = getWasteCustomers().find(x => x.id === customerId);
     if (!c) return;
     const opts = getInvoiceOptionsFromUI();
-    const invData = calculateCustomerInvoiceData(c, opts.fiscalYear, opts.monthKey, opts.calcMode);
+    const invData = calculateCustomerInvoiceData(c, opts);
     openInvoicePrintWindow([invData], opts);
 }
 
@@ -746,15 +860,15 @@ function printFilteredInvoices() {
     const opts = getInvoiceOptionsFromUI();
     const mooFilter = document.getElementById('filterMoo').value;
     const mooLabel = mooFilter ? (mooFilter === 'none' ? 'ไม่ระบุหมู่' : `หมู่ที่ ${mooFilter}`) : 'ทุกหมู่';
-    const mIdx = INV_MONTH_KEYS.indexOf(opts.monthKey);
-    const monthName = INV_MONTH_FULL[mIdx >= 0 ? mIdx : 0];
+    const sampleInv = calculateCustomerInvoiceData(list[0], opts);
 
     Swal.fire({
         title: 'ออกรายงานใบแจ้งหนี้ตามตัวกรอง?',
         html: `
             <div class="text-start bg-light p-3 rounded-3 border text-sm">
                 <div><b>พื้นที่:</b> ${mooLabel}</div>
-                <div><b>ประจำเดือน:</b> ${monthName} (ปีงบประมาณ ${opts.fiscalYear})</div>
+                <div><b>ปีงบประมาณ:</b> ${sampleInv.fiscalYearLabel}</div>
+                <div><b>งวดเดือน:</b> ${sampleInv.monthFullLabel}</div>
                 <div><b>จำนวนใบแจ้งหนี้:</b> <span class="text-primary fw-bold">${formatMoney(list.length)}</span> รายการ</div>
             </div>
             ${list.length > 500 ? `<div class="text-danger small mt-2">* มีรายการจำนวนมาก แนะนำให้กรองทีละหมู่เพื่อให้สร้างบาร์โค้ดได้รวดเร็ว</div>` : ''}
@@ -766,7 +880,7 @@ function printFilteredInvoices() {
         cancelButtonText: 'ยกเลิก'
     }).then(res => {
         if (res.isConfirmed) {
-            const invoiceDataList = list.map(c => calculateCustomerInvoiceData(c, opts.fiscalYear, opts.monthKey, opts.calcMode));
+            const invoiceDataList = list.map(c => calculateCustomerInvoiceData(c, opts));
             openInvoicePrintWindow(invoiceDataList, opts);
         }
     });
@@ -780,7 +894,7 @@ function exportFilteredInvoicesExcel() {
     }
     const opts = getInvoiceOptionsFromUI();
     const exportRows = list.map(c => {
-        const inv = calculateCustomerInvoiceData(c, opts.fiscalYear, opts.monthKey, opts.calcMode);
+        const inv = calculateCustomerInvoiceData(c, opts);
         return {
             "เลขที่ใบแจ้งหนี้": inv.invoiceNo,
             "รหัสลูกค้า": c.id,
@@ -788,6 +902,7 @@ function exportFilteredInvoicesExcel() {
             "หมู่": c.moo,
             "ชื่อเจ้าบ้าน": c.name,
             "ประเภท": c.type,
+            "ปีงบประมาณ": inv.fiscalYearLabel,
             "ประจำเดือน": inv.monthFullLabel,
             "ค่าธรรมเนียม/เดือน": c.fee,
             "ยอดรวมใบแจ้งหนี้ (บาท)": inv.totalAmount,
@@ -798,7 +913,7 @@ function exportFilteredInvoicesExcel() {
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Invoices");
-    XLSX.writeFile(wb, `รายงานใบแจ้งหนี้ค่าขยะ_${opts.fiscalYear}_${opts.monthKey}.xlsx`);
+    XLSX.writeFile(wb, `รายงานใบแจ้งหนี้ค่าขยะ_${opts.startFiscalYear}-${opts.endFiscalYear}_${opts.startMonthKey}-${opts.endMonthKey}.xlsx`);
     showToast('Export ข้อมูลใบแจ้งหนี้สำเร็จ', 'success');
 }
 

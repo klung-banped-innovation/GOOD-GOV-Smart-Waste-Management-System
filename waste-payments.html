@@ -205,8 +205,53 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         await Promise.allSettled(fetchTasks);
         
-        // Update walk-in search results if already searching
-        if (document.getElementById('walkInSearch').value) {
+        // Check URL parameters for direct Walk-in navigation (e.g. from Kor3 page)
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetTab = urlParams.get('tab');
+        const targetCustomerId = urlParams.get('customer_id');
+        const targetMonth = urlParams.get('month');
+        const targetYear = urlParams.get('year');
+
+        if (targetTab === 'walkin' || targetCustomerId) {
+            const tabEl = document.querySelector('a[href="#tabWalkin"]');
+            if (tabEl) {
+                const tab = new bootstrap.Tab(tabEl);
+                tab.show();
+            }
+        }
+
+        if (targetCustomerId) {
+            const cust = getWasteCustomers().find(c => String(c.id) === String(targetCustomerId));
+            if (cust) {
+                const searchInput = document.getElementById('walkInSearch');
+                const mooSelect = document.getElementById('walkInSearchMoo');
+                if (searchInput) searchInput.value = cust.name || cust.house_no || '';
+                if (mooSelect && cust.moo) mooSelect.value = String(cust.moo);
+                searchWalkIn();
+
+                const cy = parseInt(getCurrentFiscalYear(), 10);
+                const ty = targetYear ? parseInt(targetYear, 10) : cy;
+                if (ty < cy) {
+                    paymentMode = 'past';
+                } else if (ty > cy) {
+                    paymentMode = 'advance';
+                } else {
+                    paymentMode = 'regular';
+                }
+
+                selectCustomer(cust.id, targetYear || String(cy));
+
+                if (targetMonth) {
+                    const cb = document.getElementById(`chk_${targetMonth}`);
+                    if (cb && !cb.disabled) {
+                        cb.checked = true;
+                        toggleWalkInMonth(cb);
+                        const labelCard = cb.closest('label');
+                        if (labelCard) labelCard.classList.add('bg-danger', 'bg-opacity-10');
+                    }
+                }
+            }
+        } else if (document.getElementById('walkInSearch').value) {
             searchWalkIn();
         }
         Swal.close();

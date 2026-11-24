@@ -165,12 +165,59 @@
 <script src="assets/js/supabase-client.js"></script>
 <script src="assets/js/app.js?v=20261113"></script>
 <script src="assets/js/waste.js"></script>
+<script src="assets/js/thai-address.js"></script>
 <script src="assets/js/responsive.js"></script>
 <script>
 let currentPage = 1;
 const pageSize = 15;
 let modalMap = null;
 let modalMarker = null;
+let configuredSubdistrict = '';
+
+function getConfiguredSubdistrict() {
+    if (configuredSubdistrict) return configuredSubdistrict;
+    try {
+        const settings = (typeof stateSettings !== 'undefined' && stateSettings) ? stateSettings : JSON.parse(localStorage.getItem('waste_settings') || '{}');
+        if (settings.org_subdistrict_name) {
+            configuredSubdistrict = settings.org_subdistrict_name;
+            return configuredSubdistrict;
+        }
+        if (settings.org_subdistrict && typeof ThaiAddress !== 'undefined' && ThaiAddress.isLoaded()) {
+            const name = ThaiAddress.getSubdistrictName(parseInt(settings.org_subdistrict));
+            if (name) {
+                configuredSubdistrict = name;
+                return configuredSubdistrict;
+            }
+        }
+        if (settings.org_name) {
+            const match = settings.org_name.match(/(?:เทศบาลเมือง|เทศบาลตำบล|เทศบาลนคร|องค์การบริหารส่วนตำบล|อบต\.)\s*(.+)/);
+            if (match && match[1]) {
+                configuredSubdistrict = match[1].trim();
+                return configuredSubdistrict;
+            }
+        }
+    } catch (e) {}
+    return 'บ้านเป็ด';
+}
+
+async function initConfiguredSubdistrict() {
+    try {
+        if (typeof fetchWasteSettings === 'function') {
+            await fetchWasteSettings();
+        }
+        const settings = (typeof stateSettings !== 'undefined' && stateSettings) ? stateSettings : JSON.parse(localStorage.getItem('waste_settings') || '{}');
+        if (!settings.org_subdistrict_name && settings.org_subdistrict && typeof ThaiAddress !== 'undefined') {
+            await ThaiAddress.loadData();
+        }
+        const subName = getConfiguredSubdistrict();
+        const subSelect = document.getElementById('fSubdistrict');
+        if (subSelect && subName) {
+            subSelect.innerHTML = `<option value="${subName}">${subName}</option>`;
+        }
+    } catch (e) {
+        console.error('Error initializing subdistrict from settings:', e);
+    }
+}
 
 document.addEventListener('DOMContentLoaded', async function() { 
     Swal.fire({title: 'กำลังโหลดข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
@@ -180,7 +227,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         // 1. Fetch fresh data
         const fetchPromise = Promise.all([
             fetchWasteFeeTypes(),
-            fetchWasteCustomers()
+            fetchWasteCustomers(),
+            initConfiguredSubdistrict()
         ]);
         
         // Wait for fresh data
@@ -224,7 +272,7 @@ function populateDropdowns() {
     document.getElementById('fType').innerHTML = fTypeOpts;
 }
 
-function getFiltered() {
+function getFiltered(ignoreMoo = false) {
     let data = getWasteCustomers();
     const q = (document.getElementById('searchInput').value||'').toLowerCase();
     const moo = document.getElementById('filterMoo').value;
@@ -233,7 +281,7 @@ function getFiltered() {
     const feeFilter = document.getElementById('filterFee').value;
     
     if (q) data = data.filter(c => c.name.toLowerCase().includes(q) || c.house_no.includes(q) || (c.id_card||'').includes(q));
-    if (moo) {
+    if (!ignoreMoo && moo) {
         if (moo === 'none') {
             data = data.filter(c => {
                 const m = Number(c.moo);
@@ -263,6 +311,17 @@ function getFiltered() {
     }
     
     return data;
+}
+
+function selectMooFilter(mooVal) {
+    const filterEl = document.getElementById('filterMoo');
+    if (filterEl.value === String(mooVal) && mooVal !== '') {
+        filterEl.value = '';
+    } else {
+        filterEl.value = String(mooVal);
+    }
+    currentPage = 1;
+    renderTable();
 }
 
 function renderTable() {
@@ -325,7 +384,8 @@ function renderTable() {
 }
 
 function renderMooSummary() {
-    const data = getFiltered();
+    const data = getFiltered(true);
+    const selectedMoo = document.getElementById('filterMoo').value;
     const counts = {};
     let noneCount = 0;
     
@@ -347,35 +407,57 @@ function renderMooSummary() {
     const total = data.length;
     
     sortedMoos.forEach(m => {
+        const isSelected = String(selectedMoo) === String(m);
+        const cardClass = isSelected ? 'card bg-primary text-white shadow-sm h-100' : 'card bg-white shadow-sm h-100';
+        const borderStyle = isSelected ? 'border: none; border-top: 4px solid #1e40af; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;' : 'border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;';
+        const titleClass = isSelected ? 'fw-bold text-white mb-1' : 'fw-bold text-dark mb-1';
+        const countClass = isSelected ? 'fw-bold text-white' : 'fw-bold text-primary';
+        const unitClass = isSelected ? 'fw-normal text-white' : 'text-muted fw-normal';
+        const unitStyle = isSelected ? 'font-size: 0.8rem; opacity: 0.85;' : 'font-size: 0.8rem;';
+
         html += `
         <div class="col-6 col-sm-4 col-md-3 col-xl-2">
-            <div class="card bg-white shadow-sm h-100" style="border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; border-radius: 6px;">
+            <div class="${cardClass}" style="${borderStyle}" onclick="selectMooFilter('${m}')">
                 <div class="card-body py-2 px-3 text-center d-flex flex-column justify-content-center">
-                    <div class="fw-bold text-dark mb-1" style="font-size: 1.1rem; letter-spacing: 0.5px;">หมู่ที่ ${m}</div>
-                    <div class="fw-bold text-primary" style="font-size: 1.3rem;">${formatMoney(counts[m])} <span class="text-muted fw-normal" style="font-size: 0.8rem;">ครัวเรือน</span></div>
+                    <div class="${titleClass}" style="font-size: 1.1rem; letter-spacing: 0.5px;">หมู่ที่ ${m}</div>
+                    <div class="${countClass}" style="font-size: 1.3rem;">${formatMoney(counts[m])} <span class="${unitClass}" style="${unitStyle}">ครัวเรือน</span></div>
                 </div>
             </div>
         </div>`;
     });
     
     if (noneCount > 0) {
+        const isNoneSelected = selectedMoo === 'none';
+        const cardClass = isNoneSelected ? 'card bg-warning text-dark shadow-sm h-100' : 'card bg-white shadow-sm h-100';
+        const borderStyle = isNoneSelected ? 'border: none; border-top: 4px solid #b45309; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;' : 'border: 1px solid #e2e8f0; border-top: 4px solid #f59e0b; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;';
+        const countClass = isNoneSelected ? 'fw-bold text-dark' : 'fw-bold text-warning';
+        const unitClass = isNoneSelected ? 'fw-normal text-dark' : 'text-muted fw-normal';
+
         html += `
         <div class="col-6 col-sm-4 col-md-3 col-xl-2">
-            <div class="card bg-white shadow-sm h-100" style="border: 1px solid #e2e8f0; border-top: 4px solid #f59e0b; border-radius: 6px;">
+            <div class="${cardClass}" style="${borderStyle}" onclick="selectMooFilter('none')">
                 <div class="card-body py-2 px-3 text-center d-flex flex-column justify-content-center">
                     <div class="fw-bold text-dark mb-1" style="font-size: 1.1rem; letter-spacing: 0.5px;">ไม่ระบุหมู่</div>
-                    <div class="fw-bold text-warning" style="font-size: 1.3rem;">${formatMoney(noneCount)} <span class="text-muted fw-normal" style="font-size: 0.8rem;">ครัวเรือน</span></div>
+                    <div class="${countClass}" style="font-size: 1.3rem;">${formatMoney(noneCount)} <span class="${unitClass}" style="font-size: 0.8rem;">ครัวเรือน</span></div>
                 </div>
             </div>
         </div>`;
     }
     
+    const isAllSelected = !selectedMoo;
+    const allCardClass = isAllSelected ? 'card bg-primary text-white shadow-sm h-100' : 'card bg-white shadow-sm h-100';
+    const allBorderStyle = isAllSelected ? 'border: none; border-top: 4px solid #1e40af; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;' : 'border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;';
+    const allTitleClass = isAllSelected ? 'fw-bold mb-1' : 'fw-bold text-dark mb-1';
+    const allCountClass = isAllSelected ? 'fw-bold' : 'fw-bold text-primary';
+    const allUnitClass = isAllSelected ? 'fw-normal' : 'text-muted fw-normal';
+    const allUnitStyle = isAllSelected ? 'font-size: 0.8rem; opacity: 0.8;' : 'font-size: 0.8rem;';
+
     html = `
         <div class="col-6 col-sm-4 col-md-3 col-xl-2">
-            <div class="card bg-primary text-white shadow-sm h-100" style="border: none; border-top: 4px solid #1e40af; border-radius: 6px;">
+            <div class="${allCardClass}" style="${allBorderStyle}" onclick="selectMooFilter('')">
                 <div class="card-body py-2 px-3 text-center d-flex flex-column justify-content-center">
-                    <div class="fw-bold mb-1" style="font-size: 1.1rem; letter-spacing: 0.5px; opacity: 0.9;">รวมทั้งหมด</div>
-                    <div class="fw-bold" style="font-size: 1.4rem;">${formatMoney(total)} <span class="fw-normal" style="font-size: 0.8rem; opacity: 0.8;">ครัวเรือน</span></div>
+                    <div class="${allTitleClass}" style="font-size: 1.1rem; letter-spacing: 0.5px; ${isAllSelected ? 'opacity: 0.9;' : ''}">รวมทั้งหมด</div>
+                    <div class="${allCountClass}" style="font-size: 1.4rem;">${formatMoney(total)} <span class="${allUnitClass}" style="${allUnitStyle}">ครัวเรือน</span></div>
                 </div>
             </div>
         </div>` + html;
@@ -482,7 +564,13 @@ function editCustomer(id) {
     document.getElementById('fId').value = c.id;
     document.getElementById('fHouseNo').value = c.house_no;
     document.getElementById('fMoo').value = c.moo;
-    document.getElementById('fSubdistrict').value = c.subdistrict || 'เหมืองหม้อ';
+    const defaultSub = getConfiguredSubdistrict();
+    const customerSub = (c.subdistrict && c.subdistrict !== 'เหมืองหม้อ') ? c.subdistrict : defaultSub;
+    const subSelect = document.getElementById('fSubdistrict');
+    if (subSelect && !Array.from(subSelect.options).some(o => o.value === customerSub)) {
+        subSelect.innerHTML += `<option value="${customerSub}">${customerSub}</option>`;
+    }
+    document.getElementById('fSubdistrict').value = customerSub;
     document.getElementById('fName').value = c.name;
     document.getElementById('fIdCard').value = c.id_card||'';
     document.getElementById('fPhone').value = c.phone||'';
@@ -504,7 +592,7 @@ async function saveCustomer(e) {
         id: document.getElementById('fId').value,
         house_no: document.getElementById('fHouseNo').value || '-',
         moo: document.getElementById('fMoo').value || '-',
-        subdistrict: document.getElementById('fSubdistrict').value || 'เหมืองหม้อ',
+        subdistrict: document.getElementById('fSubdistrict').value || getConfiguredSubdistrict(),
         name: document.getElementById('fName').value || '-',
         id_card: document.getElementById('fIdCard').value || null,
         phone: document.getElementById('fPhone').value || null,
@@ -671,24 +759,26 @@ function syncAllCustomersFees() {
 }
 
 function exportToExcel() {
-    const data = getWasteCustomers();
+    const data = getFiltered();
     if (data.length === 0) { 
         Swal.fire('ข้อผิดพลาด', 'ไม่มีข้อมูลสำหรับ Export', 'error'); 
         return; 
     }
     
+    const configuredSub = getConfiguredSubdistrict();
+    
     const exportData = data.map(c => ({
         "รหัสลูกค้า": c.id,
         "บ้านเลขที่": c.house_no,
         "หมู่": c.moo,
-        "ตำบล": c.subdistrict || 'เหมืองหม้อ',
+        "ตำบล": configuredSub || c.subdistrict || 'บ้านเป็ด',
         "ชื่อเจ้าบ้าน": c.name,
         "เลขบัตรประชาชน": c.id_card || '',
         "เบอร์โทร": c.phone || '',
         "ประเภทบ้าน": c.type,
         "ค่าธรรมเนียม": c.fee,
         "วันที่เริ่มใช้งาน": c.start_date || '',
-        "สถานะ": c.status === 'active' ? 'ใช้งาน' : 'ยกเลิก',
+        "สถานะ": c.status === 'active' ? 'ใช้งาน' : c.status === 'exempt' ? 'ยกเว้น/ไม่ได้เก็บ' : 'ยกเลิก',
         "ละติจูด": c.lat || '',
         "ลองจิจูด": c.lng || '',
         "หมายเหตุ": c.note || ''
@@ -701,16 +791,24 @@ function exportToExcel() {
     const blob = new Blob([wbout], { type: 'application/octet-stream' });
     const blobUrl = URL.createObjectURL(blob);
     
+    const selectedMoo = document.getElementById('filterMoo').value;
+    let fileName = 'ฐานข้อมูลลูกค้าขยะ.xlsx';
+    if (selectedMoo === 'none') {
+        fileName = 'ฐานข้อมูลลูกค้าขยะ_ไม่ระบุหมู่.xlsx';
+    } else if (selectedMoo) {
+        fileName = `ฐานข้อมูลลูกค้าขยะ_หมู่_${selectedMoo}.xlsx`;
+    }
+
     // ใช้ anchor element เพื่อให้ตั้งชื่อไฟล์ได้
     const link = document.createElement('a');
     link.href = blobUrl;
-    link.download = 'ฐานข้อมูลลูกค้าขยะ.xlsx';
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-    showToast('Export Excel สำเร็จ', 'success');
+    showToast(`Export Excel สำเร็จ (${data.length} รายการ)`, 'success');
 }
 
 function handleImportFile(e) {
@@ -732,34 +830,78 @@ function handleImportFile(e) {
             }
             
             const existing = getWasteCustomers();
+            const existingMap = new Map();
+            existing.forEach(c => existingMap.set(String(c.id).trim(), c));
+            
             const newData = [];
-            let duplicateCount = 0;
+            const updateData = [];
+            let unchangedCount = 0;
+            const defaultSub = getConfiguredSubdistrict();
             
             // Generate max ID for new entries
             let currentMaxId = existing.reduce((max, c) => {
                 let n = 0;
-                if (c.id.startsWith('99')) n = parseInt(c.id.substring(2), 10);
-                else n = parseInt(c.id.replace(/\D/g,''), 10);
+                const cid = String(c.id || '');
+                if (cid.startsWith('99')) n = parseInt(cid.substring(2), 10);
+                else n = parseInt(cid.replace(/\D/g,''), 10);
                 return (!isNaN(n) && n > max) ? n : max;
             }, 0);
             
             json.forEach(row => {
-                let id = row["รหัสลูกค้า"] || row["รหัส"];
-                const hno = row["บ้านเลขที่"] ? String(row["บ้านเลขที่"]).trim() : '';
-                const moo = row["หมู่"] ? String(row["หมู่"]).trim() : '';
-                const subdistrict = row["ตำบล"] ? String(row["ตำบล"]).trim() : 'เหมืองหม้อ';
-                const name = row["ชื่อเจ้าบ้าน"] ? String(row["ชื่อเจ้าบ้าน"]).trim() : '-';
+                let rawId = row["รหัสลูกค้า"] !== undefined ? row["รหัสลูกค้า"] : row["รหัส"];
+                let id = rawId !== undefined && rawId !== null ? String(rawId).trim() : '';
+                const hno = row["บ้านเลขที่"] !== undefined && row["บ้านเลขที่"] !== null ? String(row["บ้านเลขที่"]).trim() : '';
+                const moo = row["หมู่"] !== undefined && row["หมู่"] !== null ? String(row["หมู่"]).trim() : '';
+                const subdistrict = row["ตำบล"] ? String(row["ตำบล"]).trim() : defaultSub;
+                const name = row["ชื่อเจ้าบ้าน"] !== undefined && row["ชื่อเจ้าบ้าน"] !== null && String(row["ชื่อเจ้าบ้าน"]).trim() !== '' ? String(row["ชื่อเจ้าบ้าน"]).trim() : '-';
                 
-                if (!hno || !moo) return; // Skip rows without required data (house_no, moo)
+                if (!id && (!hno || !moo)) return;
                 
-                // Duplicate check: ID match OR (HouseNo + Moo + Name match)
-                const isDup = existing.some(c => 
-                    (id && c.id === id) || 
-                    (c.house_no === hno && c.moo === moo && c.name === name)
-                );
+                const statusStr = row["สถานะ"] ? String(row["สถานะ"]).trim() : '';
+                let status = 'active';
+                if (statusStr === 'ยกเลิก' || statusStr === 'cancelled') status = 'cancelled';
+                else if (statusStr === 'ยกเว้น/ไม่ได้เก็บ' || statusStr === 'ยกเว้น' || statusStr === 'exempt') status = 'exempt';
                 
-                if (isDup) {
-                    duplicateCount++;
+                const existItem = id ? existingMap.get(id) : null;
+                
+                if (existItem) {
+                    const updatedItem = {
+                        id: existItem.id,
+                        house_no: hno || existItem.house_no || '-',
+                        moo: moo || existItem.moo || '-',
+                        subdistrict: row["ตำบล"] !== undefined ? subdistrict : (existItem.subdistrict || defaultSub),
+                        name: row["ชื่อเจ้าบ้าน"] !== undefined ? name : (existItem.name || '-'),
+                        id_card: row["เลขบัตรประชาชน"] !== undefined ? (String(row["เลขบัตรประชาชน"]).trim() || null) : (existItem.id_card || null),
+                        phone: row["เบอร์โทร"] !== undefined ? (String(row["เบอร์โทร"]).trim() || null) : (existItem.phone || null),
+                        type: row["ประเภทบ้าน"] !== undefined || row["ประเภท"] !== undefined ? (String(row["ประเภทบ้าน"] || row["ประเภท"] || '-').trim()) : (existItem.type || '-'),
+                        fee: row["ค่าธรรมเนียม"] !== undefined && row["ค่าธรรมเนียม"] !== '' ? (parseInt(row["ค่าธรรมเนียม"]) || 0) : (Number(existItem.fee) || 0),
+                        start_date: row["วันที่เริ่มใช้งาน"] !== undefined && String(row["วันที่เริ่มใช้งาน"]).trim() !== '' ? String(row["วันที่เริ่มใช้งาน"]).trim() : (existItem.start_date || null),
+                        status: statusStr ? status : (existItem.status || 'active'),
+                        lat: row["ละติจูด"] !== undefined && row["ละติจูด"] !== '' ? (parseFloat(row["ละติจูด"]) || null) : (existItem.lat || null),
+                        lng: row["ลองจิจูด"] !== undefined && row["ลองจิจูด"] !== '' ? (parseFloat(row["ลองจิจูด"]) || null) : (existItem.lng || null),
+                        note: row["หมายเหตุ"] !== undefined ? (String(row["หมายเหตุ"]).trim() || null) : (existItem.note || null)
+                    };
+                    
+                    const isChanged = 
+                        String(existItem.house_no || '') !== String(updatedItem.house_no || '') ||
+                        String(existItem.moo || '') !== String(updatedItem.moo || '') ||
+                        String(existItem.subdistrict || '') !== String(updatedItem.subdistrict || '') ||
+                        String(existItem.name || '') !== String(updatedItem.name || '') ||
+                        String(existItem.id_card || '') !== String(updatedItem.id_card || '') ||
+                        String(existItem.phone || '') !== String(updatedItem.phone || '') ||
+                        String(existItem.type || '') !== String(updatedItem.type || '') ||
+                        Number(existItem.fee || 0) !== Number(updatedItem.fee || 0) ||
+                        String(existItem.start_date || '') !== String(updatedItem.start_date || '') ||
+                        String(existItem.status || 'active') !== String(updatedItem.status || 'active') ||
+                        Number(existItem.lat || 0) !== Number(updatedItem.lat || 0) ||
+                        Number(existItem.lng || 0) !== Number(updatedItem.lng || 0) ||
+                        String(existItem.note || '') !== String(updatedItem.note || '');
+                        
+                    if (isChanged) {
+                        updateData.push(updatedItem);
+                    } else {
+                        unchangedCount++;
+                    }
                 } else {
                     if (!id) {
                         currentMaxId++;
@@ -767,49 +909,85 @@ function handleImportFile(e) {
                     }
                     newData.push({
                         id: id,
-                        house_no: hno,
-                        moo: moo,
+                        house_no: hno || '-',
+                        moo: moo || '-',
                         subdistrict: subdistrict,
                         name: name,
-                        id_card: row["เลขบัตรประชาชน"] ? String(row["เลขบัตรประชาชน"]) : null,
-                        phone: row["เบอร์โทร"] ? String(row["เบอร์โทร"]) : null,
-                        type: row["ประเภทบ้าน"] || row["ประเภท"] || '-',
+                        id_card: row["เลขบัตรประชาชน"] ? String(row["เลขบัตรประชาชน"]).trim() : null,
+                        phone: row["เบอร์โทร"] ? String(row["เบอร์โทร"]).trim() : null,
+                        type: String(row["ประเภทบ้าน"] || row["ประเภท"] || '-').trim(),
                         fee: parseInt(row["ค่าธรรมเนียม"]) || 0,
-                        start_date: row["วันที่เริ่มใช้งาน"] || new Date().toISOString().split('T')[0],
-                        status: (row["สถานะ"] === 'ยกเลิก' ? 'cancelled' : 'active'),
+                        start_date: row["วันที่เริ่มใช้งาน"] ? String(row["วันที่เริ่มใช้งาน"]).trim() : new Date().toISOString().split('T')[0],
+                        status: status,
                         lat: parseFloat(row["ละติจูด"]) || null,
                         lng: parseFloat(row["ลองจิจูด"]) || null,
-                        note: row["หมายเหตุ"] || ''
+                        note: row["หมายเหตุ"] ? String(row["หมายเหตุ"]).trim() : null
                     });
                 }
             });
             
             document.getElementById('importFile').value = ''; // Reset file input
             
-            if (newData.length === 0) {
-                Swal.fire('นำเข้าเสร็จสิ้น', `ข้อมูลในไฟล์ซ้ำกับที่มีอยู่แล้วทั้งหมด (${duplicateCount} รายการ)<br>ไม่มีข้อมูลใหม่เพิ่ม`, 'info');
+            if (newData.length === 0 && updateData.length === 0) {
+                Swal.fire('นำเข้าเสร็จสิ้น', `ข้อมูลในไฟล์ตรงกับฐานข้อมูลเดิมทั้งหมด (${unchangedCount} รายการ)<br>ไม่มีรายการเปลี่ยนแปลงหรือเพิ่มใหม่`, 'info');
                 return;
             }
             
             Swal.fire({
-                title: 'ยืนยันการนำเข้า',
-                html: `พบข้อมูลใหม่ <b>${newData.length}</b> รายการ<br><small class="text-muted">(ข้ามข้อมูลซ้ำ ${duplicateCount} รายการ)</small>`,
+                title: 'ยืนยันการนำเข้าข้อมูล',
+                html: `
+                    <div class="text-start d-inline-block">
+                        <div><i class="fa-solid fa-pen-to-square text-warning me-2"></i>อัปเดตข้อมูลเดิม (ตามรหัสลูกค้า): <b>${updateData.length}</b> รายการ</div>
+                        <div class="mt-1"><i class="fa-solid fa-plus-circle text-success me-2"></i>เพิ่มข้อมูลใหม่: <b>${newData.length}</b> รายการ</div>
+                        <div class="mt-1 text-muted small"><i class="fa-solid fa-check me-2"></i>ข้อมูลไม่เปลี่ยนแปลง: ${unchangedCount} รายการ</div>
+                    </div>
+                `,
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#057a55',
-                confirmButtonText: 'นำเข้าข้อมูล',
+                confirmButtonText: 'ยืนยันนำเข้า/อัปเดต',
                 cancelButtonText: 'ยกเลิก'
             }).then(async (r) => {
                 if (r.isConfirmed) {
-                    Swal.fire({title: 'กำลังนำเข้าข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
-                    // Limit parallel requests by processing in chunks if many, or just Promise.all
-                    // If it's a few hundred, Promise.all is fine.
-                    const promises = newData.map(c => saveWasteCustomerDB(c));
-                    await Promise.all(promises);
+                    Swal.fire({
+                        title: 'กำลังบันทึกข้อมูล...',
+                        html: 'กรุณารอสักครู่...',
+                        allowOutsideClick: false,
+                        didOpen: () => Swal.showLoading()
+                    });
+                    
+                    const allToSave = [...updateData, ...newData];
+                    
+                    // Save to Supabase in batches for speed & reliability
+                    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                        const batchSize = 200;
+                        for (let i = 0; i < allToSave.length; i += batchSize) {
+                            const chunk = allToSave.slice(i, i + batchSize);
+                            const { error } = await supabaseClient.from('waste_customers').upsert(chunk, { onConflict: 'id' });
+                            if (error) {
+                                console.error('Batch upsert error:', error);
+                                // Fallback individual save
+                                for (const item of chunk) {
+                                    await saveWasteCustomerDB(item);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Update local storage cache
+                    const customers = getWasteCustomers();
+                    const custMap = new Map();
+                    customers.forEach(c => custMap.set(String(c.id), c));
+                    allToSave.forEach(c => custMap.set(String(c.id), c));
+                    const mergedList = Array.from(custMap.values());
+                    if (typeof saveWasteCustomers === 'function') {
+                        saveWasteCustomers(mergedList);
+                    }
+                    
                     await fetchWasteCustomers(); // Re-sync state
                     renderTable();
                     Swal.close();
-                    Swal.fire('สำเร็จ', `นำเข้าข้อมูลใหม่ ${newData.length} รายการเรียบร้อยแล้ว`, 'success');
+                    Swal.fire('สำเร็จ', `อัปเดตข้อมูล ${updateData.length} รายการ และเพิ่มใหม่ ${newData.length} รายการ เรียบร้อยแล้ว`, 'success');
                 }
             });
             
@@ -821,26 +999,6 @@ function handleImportFile(e) {
     };
     reader.readAsArrayBuffer(file);
 }
-
-// ----------------------------------------------------
-// Load Subdistrict setting into dropdown
-// ----------------------------------------------------
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-        const localSettings = localStorage.getItem('waste_settings');
-        if (localSettings) {
-            const settings = JSON.parse(localSettings);
-            if (settings.org_subdistrict_name) {
-                const subSelect = document.getElementById('fSubdistrict');
-                if (subSelect) {
-                    subSelect.innerHTML = `<option value="${settings.org_subdistrict_name}">${settings.org_subdistrict_name}</option>`;
-                }
-            }
-        }
-    } catch (e) {
-        console.error('Error loading subdistrict from settings:', e);
-    }
-});
 </script>
 </body>
 </html>

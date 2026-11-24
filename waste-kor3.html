@@ -11,13 +11,58 @@
     <link rel="stylesheet" href="assets/css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
+        .kor3-table {
+            border-collapse: collapse !important;
+            width: 100%;
+        }
+
+        .kor3-table thead th,
+        .kor3-table tbody td,
+        .kor3-table tfoot td {
+            border: 1px solid #cbd5e1 !important;
+            padding: 6px 8px !important;
+            vertical-align: middle;
+        }
+
+        .kor3-table thead th {
+            background: #f1f5f9 !important;
+            color: #334155;
+            font-weight: 700;
+        }
+
+        .col-seq {
+            width: 56px;
+            min-width: 56px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .col-name {
+            min-width: 160px;
+        }
+
+        .col-house {
+            width: 95px;
+            min-width: 90px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .col-fee {
+            width: 96px;
+            min-width: 92px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
         .month-cell {
-            width: 55px;
+            width: 46px;
+            min-width: 42px;
             text-align: center;
             cursor: pointer;
-            font-size: 0.72rem;
-            font-weight: 600;
-            padding: 6px 4px !important;
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 6px 2px !important;
             transition: opacity 0.1s ease-in-out, background-color 0.1s ease-in-out;
         }
 
@@ -27,7 +72,7 @@
         }
 
         .month-unpaid {
-            background: #fef2f2 !important;
+            background: #fee2e2 !important;
             color: #991b1b;
         }
 
@@ -47,32 +92,84 @@
         }
 
         .kor3-summary-card {
-            border-radius: 12px;
-            padding: 14px 18px;
+            border-radius: 14px;
+            padding: 16px 18px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            height: 100%;
+        }
+
+        .kor3-summary-card.clickable-card {
+            cursor: pointer;
+        }
+
+        .kor3-summary-card.clickable-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+        }
+
+        .kor3-summary-card.active-card {
+            outline: 2px solid #1a56db;
+            box-shadow: 0 4px 14px rgba(26,86,219,0.18);
         }
 
         .kor3-summary-card .icon-box {
-            width: 42px;
-            height: 42px;
-            border-radius: 10px;
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
+            flex-shrink: 0;
         }
 
         .kor3-summary-card .value {
-            font-size: 1.3rem;
+            font-size: 1.35rem;
             font-weight: 700;
             line-height: 1.2;
         }
 
         .kor3-summary-card .label {
-            font-size: 0.75rem;
-            color: #6b7280;
+            font-size: 0.78rem;
+            color: #4b5563;
+            font-weight: 500;
+        }
+
+        .kor3-summary-card .sub-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .kor3-month-overview-table th,
+        .kor3-month-overview-table td {
+            text-align: center;
+            padding: 6px 4px !important;
+            font-size: 0.76rem;
+            border: 1px solid #e2e8f0 !important;
+        }
+
+        .kor3-month-overview-table th {
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 700;
+        }
+
+        .month-col-in-range {
+            box-shadow: inset 0 0 0 1px rgba(26, 86, 219, 0.35);
+        }
+
+        .month-th-in-range {
+            background: #dbeafe !important;
+            color: #1e40af !important;
         }
 
         .year-btn {
@@ -86,6 +183,13 @@
             background: linear-gradient(135deg, #1a56db, #3b82f6) !important;
             border-color: #1a56db !important;
             color: #fff !important;
+        }
+
+        .preset-range-btn {
+            font-size: 0.73rem;
+            padding: 2px 10px;
+            border-radius: 14px;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -119,23 +223,50 @@
             </div>
 
             <!-- Year Selector -->
-            <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                <span class="fw-semibold text-muted" style="font-size:0.85rem;"><i
-                        class="fa-solid fa-calendar-days me-1"></i>ปีงบประมาณ:</span>
-                <div class="btn-group" id="yearBtnGroup" role="group"></div>
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-3 flex-wrap">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="fw-semibold text-muted" style="font-size:0.85rem;"><i
+                            class="fa-solid fa-calendar-days me-1"></i>ปีงบประมาณ:</span>
+                    <div class="btn-group" id="yearBtnGroup" role="group"></div>
+                </div>
+                <div id="activeRangeHeaderBadge"></div>
             </div>
 
             <!-- Summary Cards -->
-            <div class="row g-3 mb-4" id="kor3Summary"></div>
+            <div class="row g-3 mb-3" id="kor3Summary"></div>
+
+            <!-- Monthly Breakdown Dashboard Table -->
+            <div class="card mb-3 border-0 shadow-sm">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                        <div class="fw-bold text-dark" style="font-size: 0.85rem;">
+                            <i class="fa-solid fa-chart-column text-primary me-1"></i>ตารางสรุปยอดชำระและค้างชำระรายเดือน
+                            <span class="text-muted fw-normal" style="font-size: 0.78rem;" id="overviewSubtitle"></span>
+                        </div>
+                        <div class="text-xs text-muted">คลิกที่การ์ดด้านบนหรือเลือกช่วงเดือนด้านล่างเพื่อกรองรายชื่อ</div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm kor3-month-overview-table mb-0">
+                            <thead id="kor3OverviewHead"></thead>
+                            <tbody id="kor3OverviewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
             <!-- Filters -->
-            <div class="card mb-4">
+            <div class="card mb-4 border-0 shadow-sm">
                 <div class="card-body py-3">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-3"><input type="text" class="form-control form-control-sm" id="kor3Search"
-                                placeholder="ค้นหาชื่อ / บ้านเลขที่..." oninput="renderKor3()"></div>
-                        <div class="col-md-2"><select class="form-select form-select-sm" id="kor3Moo"
-                                onchange="renderKor3()">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label text-xs fw-bold text-muted mb-1"><i class="fa-solid fa-magnifying-glass me-1"></i>ค้นหาลูกค้า</label>
+                            <input type="text" class="form-control form-control-sm" id="kor3Search"
+                                placeholder="ค้นหาชื่อ / บ้านเลขที่..." oninput="kor3CurrentPage=1; renderKor3()">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label text-xs fw-bold text-muted mb-1"><i class="fa-solid fa-location-dot me-1"></i>หมู่บ้าน</label>
+                            <select class="form-select form-select-sm" id="kor3Moo"
+                                onchange="kor3CurrentPage=1; renderKor3()">
                                 <option value="">ทุกหมู่</option>
                                 <option value="1">หมู่ 1</option>
                                 <option value="2">หมู่ 2</option>
@@ -160,16 +291,71 @@
                                 <option value="21">หมู่ 21</option>
                                 <option value="22">หมู่ 22</option>
                                 <option value="23">หมู่ 23</option>
-                            </select></div>
-                        <div class="col-md-2"><select class="form-select form-select-sm" id="kor3Status"
-                                onchange="renderKor3()">
-                                <option value="">ทุกสถานะ</option>
-                                <option value="has_unpaid">มีค้างชำระ</option>
-                                <option value="all_paid">ชำระครบ</option>
-                            </select></div>
-                        <div class="col-md-5 text-end">
-                            <span class="badge me-1" style="background:#dcfce7;color:#166534;">● ชำระแล้ว</span>
-                            <span class="badge me-1" style="background:#fef2f2;color:#991b1b;">● ค้างชำระ</span>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label text-xs fw-bold text-muted mb-1"><i class="fa-regular fa-calendar me-1"></i>ตั้งแต่เดือน</label>
+                            <select class="form-select form-select-sm" id="kor3StartMonth" onchange="onMonthRangeChange()">
+                                <option value="0">ตุลาคม (ต.ค.)</option>
+                                <option value="1">พฤศจิกายน (พ.ย.)</option>
+                                <option value="2">ธันวาคม (ธ.ค.)</option>
+                                <option value="3">มกราคม (ม.ค.)</option>
+                                <option value="4">กุมภาพันธ์ (ก.พ.)</option>
+                                <option value="5">มีนาคม (มี.ค.)</option>
+                                <option value="6">เมษายน (เม.ย.)</option>
+                                <option value="7">พฤษภาคม (พ.ค.)</option>
+                                <option value="8">มิถุนายน (มิ.ย.)</option>
+                                <option value="9">กรกฎาคม (ก.ค.)</option>
+                                <option value="10">สิงหาคม (ส.ค.)</option>
+                                <option value="11">กันยายน (ก.ย.)</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label text-xs fw-bold text-muted mb-1"><i class="fa-regular fa-calendar-check me-1"></i>ถึงเดือน</label>
+                            <select class="form-select form-select-sm" id="kor3EndMonth" onchange="onMonthRangeChange()">
+                                <option value="0">ตุลาคม (ต.ค.)</option>
+                                <option value="1">พฤศจิกายน (พ.ย.)</option>
+                                <option value="2">ธันวาคม (ธ.ค.)</option>
+                                <option value="3">มกราคม (ม.ค.)</option>
+                                <option value="4">กุมภาพันธ์ (ก.พ.)</option>
+                                <option value="5">มีนาคม (มี.ค.)</option>
+                                <option value="6">เมษายน (เม.ย.)</option>
+                                <option value="7">พฤษภาคม (พ.ค.)</option>
+                                <option value="8">มิถุนายน (มิ.ย.)</option>
+                                <option value="9">กรกฎาคม (ก.ค.)</option>
+                                <option value="10">สิงหาคม (ส.ค.)</option>
+                                <option value="11" selected>กันยายน (ก.ย.)</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label text-xs fw-bold text-muted mb-1"><i class="fa-solid fa-filter me-1"></i>สถานะในช่วงเดือนที่เลือก</label>
+                            <div class="d-flex gap-1">
+                                <select class="form-select form-select-sm" id="kor3Status"
+                                    onchange="kor3CurrentPage=1; renderKor3()">
+                                    <option value="">ทุกสถานะ (ทั้งหมด)</option>
+                                    <option value="all_paid">ชำระแล้ว (ครบในช่วงเดือนที่เลือก)</option>
+                                    <option value="any_paid">ชำระแล้ว (อย่างน้อย 1 เดือนในช่วงนี้)</option>
+                                    <option value="has_unpaid">ค้างชำระ (มีค้างในช่วงเดือนที่เลือก)</option>
+                                    <option value="all_unpaid">ค้างชำระทุกเดือนในช่วงที่เลือก</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" onclick="resetKor3Filters()" title="ล้างตัวกรอง">
+                                    <i class="fa-solid fa-rotate-left"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2 pt-2 border-top">
+                        <div class="d-flex align-items-center gap-1 flex-wrap">
+                            <span class="text-xs text-muted fw-semibold me-1">เลือกช่วงเดือนด่วน:</span>
+                            <button type="button" class="btn btn-outline-primary preset-range-btn" onclick="setMonthRangePreset(0, 11)">ทั้งปีงบฯ (ต.ค.-ก.ย.)</button>
+                            <button type="button" class="btn btn-outline-secondary preset-range-btn" onclick="setMonthRangePreset(0, 2)">ไตรมาส 1 (ต.ค.-ธ.ค.)</button>
+                            <button type="button" class="btn btn-outline-secondary preset-range-btn" onclick="setMonthRangePreset(3, 5)">ไตรมาส 2 (ม.ค.-มี.ค.)</button>
+                            <button type="button" class="btn btn-outline-secondary preset-range-btn" onclick="setMonthRangePreset(6, 8)">ไตรมาส 3 (เม.ย.-มิ.ย.)</button>
+                            <button type="button" class="btn btn-outline-secondary preset-range-btn" onclick="setMonthRangePreset(9, 11)">ไตรมาส 4 (ก.ค.-ก.ย.)</button>
+                        </div>
+                        <div>
+                            <span class="badge me-1" style="background:#dcfce7;color:#166534;">● ชำระแล้ว (✓)</span>
+                            <span class="badge me-1" style="background:#fee2e2;color:#991b1b;">● ค้างชำระ</span>
                             <span class="badge me-1" style="background:#fef9c3;color:#854d0e;">● รออนุมัติ</span>
                             <span class="badge" style="background:#f3f4f6;color:#4b5563;">● ยกเว้นชำระ</span>
                         </div>
@@ -181,13 +367,13 @@
             <div class="card">
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-hover table-bordered mb-0" style="font-size:0.82rem;">
+                        <table class="table table-hover table-bordered kor3-table mb-0" style="font-size:0.82rem;">
                             <thead>
                                 <tr>
-                                    <th class="ps-3" style="min-width:60px;">ลำดับ</th>
-                                    <th style="min-width:140px;">ชื่อ</th>
-                                    <th style="min-width:90px;">บ้านเลขที่</th>
-                                    <th style="min-width:65px;">ค่าธรรมเนียม</th>
+                                    <th class="col-seq">ลำดับ</th>
+                                    <th class="col-name">ชื่อ</th>
+                                    <th class="col-house">บ้านเลขที่</th>
+                                    <th class="col-fee">ค่าธรรมเนียม</th>
                                     <th class="month-cell">ต.ค.</th>
                                     <th class="month-cell">พ.ย.</th>
                                     <th class="month-cell">ธ.ค.</th>
@@ -291,15 +477,41 @@
             const ms = getMonthlyStatus();
             const cy = getCurrentFiscalYear();
             const cyNum = parseInt(cy);
+            const maxAllowedYear = cyNum + 1;
+            const defaultMinYear = cyNum - 2; // ย้อนหลังเริ่มต้น 2 ปี (รวมปีเก่าในข้อมูลได้ถึง 3 ปีหรือตามที่มีการชำระจริง)
 
-            // รวบรวมปีงบประมาณทั้งหมดจากข้อมูล
-            const yearSet = new Set([String(cyNum - 1), cy, String(cyNum + 1)]);
+            // รวบรวมปีงบประมาณเริ่มต้น: ย้อนหลัง 2 ปี, ปีปัจจุบัน, และปีถัดไป 1 ปี
+            const yearSet = new Set();
+            for (let y = defaultMinYear; y <= maxAllowedYear; y++) {
+                yearSet.add(String(y));
+            }
+
+            // เพิ่มปีย้อนหลังจากข้อมูลจริง (เฉพาะปีที่มีรายการ paid หรือ pending จริง และไม่เกินปีถัดไป 1 ปี)
             Object.values(ms).forEach(customerYears => {
-                Object.keys(customerYears).forEach(y => yearSet.add(y));
+                Object.keys(customerYears).forEach(y => {
+                    const yNum = parseInt(y, 10);
+                    if (!isNaN(yNum) && yNum >= 2565 && yNum <= maxAllowedYear) {
+                        const monthObj = customerYears[y] || {};
+                        const hasRealRecord = Object.values(monthObj).some(st => st === 'paid' || st === 'pending');
+                        if (hasRealRecord) {
+                            yearSet.add(String(yNum));
+                        }
+                    }
+                });
             });
-            // รวม custom years จากระบบรับชำระ
+
+            // ทำความสะอาด customYears ใน localStorage หากมีปีที่เกิน maxAllowedYear (เช่น 2578)
             const customYears = getWasteData('customYears');
-            if (Array.isArray(customYears)) customYears.forEach(y => yearSet.add(y));
+            if (Array.isArray(customYears)) {
+                const validCustomYears = customYears.filter(y => {
+                    const yNum = parseInt(y, 10);
+                    return !isNaN(yNum) && yNum >= 2565 && yNum <= maxAllowedYear;
+                });
+                if (validCustomYears.length !== customYears.length) {
+                    saveWasteData('customYears', validCustomYears);
+                }
+                validCustomYears.forEach(y => yearSet.add(String(y)));
+            }
 
             const years = Array.from(yearSet).sort();
             kor3SelectedYear = cy; // default = ปีปัจจุบัน
@@ -322,63 +534,264 @@
             renderKor3();
         }
 
+        const KOR3_FULL_MONTHS = ['ตุลาคม', 'พฤศจิกายน', 'ธันวาคม', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน'];
+
+        function getSelectedMonthRange() {
+            const startEl = document.getElementById('kor3StartMonth');
+            const endEl = document.getElementById('kor3EndMonth');
+            let s = startEl ? parseInt(startEl.value, 10) : 0;
+            let e = endEl ? parseInt(endEl.value, 10) : 11;
+            if (isNaN(s)) s = 0;
+            if (isNaN(e)) e = 11;
+            if (s > e) {
+                e = s;
+                if (endEl) endEl.value = String(e);
+            }
+            const indices = [];
+            for (let i = s; i <= e; i++) indices.push(i);
+            const keys = indices.map(i => WASTE_MONTH_KEYS[i]);
+            const labelFull = s === e
+                ? `เดือน${KOR3_FULL_MONTHS[s]}`
+                : (s === 0 && e === 11 ? 'ทั้งปีงบประมาณ (ต.ค. - ก.ย.)' : `เดือน${KOR3_FULL_MONTHS[s]} - ${KOR3_FULL_MONTHS[e]}`);
+            const labelShort = s === e
+                ? WASTE_MONTHS[s]
+                : `${WASTE_MONTHS[s]} - ${WASTE_MONTHS[e]}`;
+            return { startIdx: s, endIdx: e, indices, keys, labelFull, labelShort, monthCount: indices.length };
+        }
+
+        function onMonthRangeChange() {
+            const startEl = document.getElementById('kor3StartMonth');
+            const endEl = document.getElementById('kor3EndMonth');
+            if (startEl && endEl && parseInt(startEl.value, 10) > parseInt(endEl.value, 10)) {
+                endEl.value = startEl.value;
+            }
+            kor3CurrentPage = 1;
+            renderKor3();
+        }
+
+        function setMonthRangePreset(startIdx, endIdx) {
+            const startEl = document.getElementById('kor3StartMonth');
+            const endEl = document.getElementById('kor3EndMonth');
+            if (startEl) startEl.value = String(startIdx);
+            if (endEl) endEl.value = String(endIdx);
+            kor3CurrentPage = 1;
+            renderKor3();
+        }
+
+        function setStatusFilterFromCard(statusVal) {
+            const statusEl = document.getElementById('kor3Status');
+            if (!statusEl) return;
+            if (statusEl.value === statusVal && statusVal !== '') {
+                statusEl.value = '';
+            } else {
+                statusEl.value = statusVal;
+            }
+            kor3CurrentPage = 1;
+            renderKor3();
+        }
+
+        function resetKor3Filters() {
+            const searchEl = document.getElementById('kor3Search');
+            const mooEl = document.getElementById('kor3Moo');
+            const startEl = document.getElementById('kor3StartMonth');
+            const endEl = document.getElementById('kor3EndMonth');
+            const statusEl = document.getElementById('kor3Status');
+            if (searchEl) searchEl.value = '';
+            if (mooEl) mooEl.value = '';
+            if (startEl) startEl.value = '0';
+            if (endEl) endEl.value = '11';
+            if (statusEl) statusEl.value = '';
+            kor3CurrentPage = 1;
+            renderKor3();
+        }
+
+        function matchesStatusInRange(yearData, rangeKeys, statusFilter) {
+            if (!statusFilter) return true;
+            if (statusFilter === 'all_paid') {
+                return rangeKeys.every(mk => yearData[mk] === 'paid');
+            }
+            if (statusFilter === 'any_paid') {
+                return rangeKeys.some(mk => yearData[mk] === 'paid');
+            }
+            if (statusFilter === 'has_unpaid') {
+                return rangeKeys.some(mk => yearData[mk] !== 'paid' && yearData[mk] !== 'exempted');
+            }
+            if (statusFilter === 'all_unpaid') {
+                return rangeKeys.every(mk => yearData[mk] !== 'paid' && yearData[mk] !== 'exempted');
+            }
+            return true;
+        }
+
         function renderKor3() {
-            let customers = getWasteCustomers().filter(c => c.status === 'active');
+            const allActiveCustomers = getWasteCustomers().filter(c => c.status === 'active');
             const ms = getMonthlyStatus();
             const q = (document.getElementById('kor3Search').value || '').toLowerCase();
             const moo = document.getElementById('kor3Moo').value;
             const statusFilter = document.getElementById('kor3Status').value;
             const year = kor3SelectedYear || getCurrentFiscalYear();
+            const range = getSelectedMonthRange();
 
-            if (q) customers = customers.filter(c => c.name.toLowerCase().includes(q) || c.house_no.includes(q));
-            if (moo) customers = customers.filter(c => c.moo === moo);
+            // Base filtered customers (Search + Moo) for Dashboard KPI & Overview Table
+            let baseCustomers = allActiveCustomers;
+            if (q) baseCustomers = baseCustomers.filter(c => c.name.toLowerCase().includes(q) || c.house_no.includes(q));
+            if (moo) baseCustomers = baseCustomers.filter(c => String(c.moo) === String(moo));
 
-            // Filter by status within the selected fiscal year
-            if (statusFilter === 'has_unpaid') customers = customers.filter(c => {
-                const yearData = (ms[c.id] || {})[year] || {};
-                return WASTE_MONTH_KEYS.some(mk => yearData[mk] !== 'paid');
-            });
-            if (statusFilter === 'all_paid') customers = customers.filter(c => {
-                const yearData = (ms[c.id] || {})[year] || {};
-                return WASTE_MONTH_KEYS.every(mk => yearData[mk] === 'paid');
-            });
+            // Calculate stats for selected month range across baseCustomers
+            let rangeAllPaidCount = 0;
+            let rangeAnyPaidCount = 0;
+            let rangeHasUnpaidCount = 0;
+            let rangeAllUnpaidCount = 0;
+            let rangePaidRevenue = 0;
+            let rangeUnpaidDebt = 0;
 
-            // สรุปสถิติ
-            const allCustomers = getWasteCustomers().filter(c => c.status === 'active');
-            let totalPaid = 0, totalUnpaid = 0, totalPending = 0, totalRevenue = 0;
-            let householdsAllPaid = 0, householdsHasUnpaid = 0;
-            allCustomers.forEach(c => {
+            const monthPaidCountsBase = new Array(12).fill(0);
+            const monthUnpaidCountsBase = new Array(12).fill(0);
+            const monthPaidRevBase = new Array(12).fill(0);
+
+            baseCustomers.forEach(c => {
                 const yearData = (ms[c.id] || {})[year] || {};
-                let customerAllPaid = true;
-                WASTE_MONTH_KEYS.forEach(mk => {
-                    const monthFee = getFeeForMonth(c.id, mk, year);
-                    if (yearData[mk] === 'paid') { totalPaid++; totalRevenue += monthFee; }
-                    else if (yearData[mk] === 'pending') { totalPending++; customerAllPaid = false; }
-                    else { totalUnpaid++; customerAllPaid = false; }
+                let paidInRange = 0;
+                let unpaidInRange = 0;
+
+                WASTE_MONTH_KEYS.forEach((mk, mi) => {
+                    const val = yearData[mk] || 'unpaid';
+                    const mFee = getFeeForMonth(c.id, mk, year);
+                    if (val === 'paid') {
+                        monthPaidCountsBase[mi]++;
+                        monthPaidRevBase[mi] += mFee;
+                    } else if (val !== 'exempted') {
+                        monthUnpaidCountsBase[mi]++;
+                    }
+
+                    if (mi >= range.startIdx && mi <= range.endIdx) {
+                        if (val === 'paid') {
+                            paidInRange++;
+                            rangePaidRevenue += mFee;
+                        } else if (val !== 'exempted') {
+                            unpaidInRange++;
+                            rangeUnpaidDebt += mFee;
+                        }
+                    }
                 });
-                if (customerAllPaid) householdsAllPaid++;
-                else householdsHasUnpaid++;
+
+                if (paidInRange === range.monthCount) rangeAllPaidCount++;
+                if (paidInRange > 0) rangeAnyPaidCount++;
+                if (unpaidInRange > 0) rangeHasUnpaidCount++;
+                if (unpaidInRange === range.monthCount) rangeAllUnpaidCount++;
             });
 
-            // Render summary cards
+            // Apply statusFilter for table display
+            const customers = baseCustomers.filter(c => {
+                const yearData = (ms[c.id] || {})[year] || {};
+                return matchesStatusInRange(yearData, range.keys, statusFilter);
+            });
+
+            // Header range badge
+            const rangeBadgeEl = document.getElementById('activeRangeHeaderBadge');
+            if (rangeBadgeEl) {
+                const mooLabel = moo ? `หมู่ที่ ${moo}` : 'ทุกหมู่บ้าน';
+                rangeBadgeEl.innerHTML = `
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2" style="font-size: 0.8rem;">
+                        <i class="fa-solid fa-calendar-check me-1"></i>ช่วงที่ดู: <b>${range.labelFull}</b> (${range.monthCount} เดือน) • ${mooLabel}
+                    </span>
+                `;
+            }
+
+            // Render summary cards (reflecting selected month range & clickable to filter)
+            const isPaidCardActive = statusFilter === 'all_paid' || statusFilter === 'any_paid';
+            const isUnpaidCardActive = statusFilter === 'has_unpaid' || statusFilter === 'all_unpaid';
+            const isAllCardActive = statusFilter === '';
+
             document.getElementById('kor3Summary').innerHTML = `
-        <div class="col-6 col-lg-3"><div class="kor3-summary-card" style="background:#f0f5ff;">
-            <div class="icon-box" style="background:#dbeafe;color:#1a56db;"><i class="fa-solid fa-users"></i></div>
-            <div><div class="value">${allCustomers.length}</div><div class="label">ครัวเรือนทั้งหมด</div></div>
-        </div></div>
-        <div class="col-6 col-lg-3"><div class="kor3-summary-card" style="background:#f0fdf4;">
-            <div class="icon-box" style="background:#dcfce7;color:#166534;"><i class="fa-solid fa-check-circle"></i></div>
-            <div><div class="value text-success">${householdsAllPaid}</div><div class="label">ชำระครบทุกเดือน (ครัวเรือน)</div></div>
-        </div></div>
-        <div class="col-6 col-lg-3"><div class="kor3-summary-card" style="background:#fef2f2;">
-            <div class="icon-box" style="background:#fecaca;color:#991b1b;"><i class="fa-solid fa-times-circle"></i></div>
-            <div><div class="value text-danger">${householdsHasUnpaid}</div><div class="label">มีเดือนค้างชำระ (ครัวเรือน)</div></div>
-        </div></div>
-        <div class="col-6 col-lg-3"><div class="kor3-summary-card" style="background:#f0fdf4;">
-            <div class="icon-box" style="background:#bbf7d0;color:#057a55;"><i class="fa-solid fa-coins"></i></div>
-            <div><div class="value text-success">฿${formatMoney(totalRevenue)}</div><div class="label">รายรับปีนี้ (ประมาณ)</div></div>
-        </div></div>
-    `;
+                <div class="col-6 col-lg-3">
+                    <div class="kor3-summary-card clickable-card ${isAllCardActive ? 'active-card' : ''}" style="background:#f0f5ff;" onclick="setStatusFilterFromCard('')">
+                        <div class="icon-box" style="background:#dbeafe;color:#1a56db;"><i class="fa-solid fa-users"></i></div>
+                        <div>
+                            <div class="value text-primary">${formatMoney(baseCustomers.length)} <span class="fs-6 fw-normal text-muted">ราย</span></div>
+                            <div class="label">ครัวเรือนทั้งหมด ${moo ? `(หมู่ ${moo})` : ''}</div>
+                            <span class="sub-badge" style="background:#dbeafe;color:#1e40af;">แสดงในตาราง ${formatMoney(customers.length)} ราย</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kor3-summary-card clickable-card ${isPaidCardActive ? 'active-card' : ''}" style="background:#f0fdf4;" onclick="setStatusFilterFromCard('all_paid')">
+                        <div class="icon-box" style="background:#dcfce7;color:#166534;"><i class="fa-solid fa-circle-check"></i></div>
+                        <div>
+                            <div class="value text-success">${formatMoney(rangeAllPaidCount)} <span class="fs-6 fw-normal text-muted">ราย</span></div>
+                            <div class="label">ชำระครบ (${range.labelShort})</div>
+                            <span class="sub-badge" style="background:#dcfce7;color:#166534;">ชำระบางเดือน/อย่างน้อย 1 เดือน: ${formatMoney(rangeAnyPaidCount)} ราย</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kor3-summary-card clickable-card ${isUnpaidCardActive ? 'active-card' : ''}" style="background:#fef2f2;" onclick="setStatusFilterFromCard('has_unpaid')">
+                        <div class="icon-box" style="background:#fecaca;color:#991b1b;"><i class="fa-solid fa-circle-xmark"></i></div>
+                        <div>
+                            <div class="value text-danger">${formatMoney(rangeHasUnpaidCount)} <span class="fs-6 fw-normal text-muted">ราย</span></div>
+                            <div class="label">ค้างชำระ (${range.labelShort})</div>
+                            <span class="sub-badge" style="background:#fee2e2;color:#991b1b;">ค้างทุกเดือนในช่วงนี้: ${formatMoney(rangeAllUnpaidCount)} ราย</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kor3-summary-card" style="background:#f0fdf4;">
+                        <div class="icon-box" style="background:#bbf7d0;color:#057a55;"><i class="fa-solid fa-coins"></i></div>
+                        <div>
+                            <div class="value text-success">฿${formatMoney(rangePaidRevenue)}</div>
+                            <div class="label">ยอดชำระแล้ว (${range.labelShort})</div>
+                            <span class="sub-badge" style="background:#fef2f2;color:#dc2626;">ยอดค้างช่วงนี้: ฿${formatMoney(rangeUnpaidDebt)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Render Monthly Breakdown Dashboard Table
+            const overviewSubtitle = document.getElementById('overviewSubtitle');
+            if (overviewSubtitle) {
+                overviewSubtitle.textContent = `(ปีงบฯ ${year} • ${moo ? 'หมู่ที่ ' + moo : 'ทุกหมู่'} • ช่วงที่เลือก: ${range.labelFull})`;
+            }
+            const ovHead = document.getElementById('kor3OverviewHead');
+            const ovBody = document.getElementById('kor3OverviewBody');
+            if (ovHead && ovBody) {
+                const monthHeaders = WASTE_MONTHS.map((m, mi) => {
+                    const inRange = mi >= range.startIdx && mi <= range.endIdx;
+                    return `<th class="${inRange ? 'month-th-in-range' : ''}" style="cursor:pointer;" onclick="setMonthRangePreset(${mi}, ${mi})" title="คลิกเพื่อดูเฉพาะเดือน ${KOR3_FULL_MONTHS[mi]}">${m}</th>`;
+                }).join('');
+                ovHead.innerHTML = `<tr><th style="text-align:left;min-width:140px;padding-left:10px !important;">สถานะรายเดือน</th>${monthHeaders}<th class="month-th-in-range" style="min-width:110px;">สรุปช่วง ${range.labelShort}</th></tr>`;
+
+                const paidRowCells = WASTE_MONTHS.map((m, mi) => {
+                    const inRange = mi >= range.startIdx && mi <= range.endIdx;
+                    return `<td class="${inRange ? 'fw-bold text-success' : 'text-muted'}" style="${inRange ? 'background:#f0fdf4;' : ''}">${formatMoney(monthPaidCountsBase[mi])}</td>`;
+                }).join('');
+
+                const unpaidRowCells = WASTE_MONTHS.map((m, mi) => {
+                    const inRange = mi >= range.startIdx && mi <= range.endIdx;
+                    return `<td class="${inRange ? 'fw-bold text-danger' : 'text-muted'}" style="${inRange ? 'background:#fef2f2;' : ''}">${formatMoney(monthUnpaidCountsBase[mi])}</td>`;
+                }).join('');
+
+                ovBody.innerHTML = `
+                    <tr>
+                        <td style="text-align:left;padding-left:10px !important;" class="fw-semibold text-success"><i class="fa-solid fa-check me-1"></i>ชำระแล้ว (ราย)</td>
+                        ${paidRowCells}
+                        <td class="fw-bold text-success" style="background:#dcfce7;">ครบ ${formatMoney(rangeAllPaidCount)} ราย</td>
+                    </tr>
+                    <tr>
+                        <td style="text-align:left;padding-left:10px !important;" class="fw-semibold text-danger"><i class="fa-solid fa-xmark me-1"></i>ค้างชำระ (ราย)</td>
+                        ${unpaidRowCells}
+                        <td class="fw-bold text-danger" style="background:#fee2e2;">มีค้าง ${formatMoney(rangeHasUnpaidCount)} ราย</td>
+                    </tr>
+                `;
+            }
+
+            // Highlight table header months in selected range
+            const mainTableMonthThs = document.querySelectorAll('.kor3-table thead th.month-cell');
+            mainTableMonthThs.forEach((th, mi) => {
+                if (mi >= range.startIdx && mi <= range.endIdx) {
+                    th.classList.add('month-th-in-range');
+                } else {
+                    th.classList.remove('month-th-in-range');
+                }
+            });
 
             // Pagination Logic
             const totalItems = customers.length;
@@ -392,13 +805,11 @@
             const tbody = document.getElementById('kor3Body');
             const fyNum = parseInt(year);
 
-            // Count paid/unpaid per month for footer
+            // Count paid/unpaid per month for footer (based on filtered customers)
             const monthPaidCounts = new Array(12).fill(0);
             const monthTotalCounts = new Array(12).fill(0);
             const monthRevenue = new Array(12).fill(0);
 
-            // Note: We use paginatedCustomers for the table view, but the footer can show summary for the current page OR all.
-            // Usually footer in enterprise shows summary for ALL filtered data. We will compute footer based on ALL filtered customers.
             customers.forEach(c => {
                 const yearData = (ms[c.id] || {})[year] || {};
                 const monthFees = WASTE_MONTH_KEYS.map(mk => getFeeForMonth(c.id, mk, year));
@@ -425,14 +836,18 @@
                 const monthCells = WASTE_MONTH_KEYS.map((mk, mi) => {
                     const val = yearData[mk] || 'unpaid';
                     const cls = val === 'paid' ? 'month-paid' : val === 'pending' ? 'month-pending' : val === 'exempted' ? 'month-exempted' : 'month-unpaid';
-                    const icon = val === 'paid' ? '✓' : val === 'pending' ? '◷' : val === 'exempted' ? '-' : '✗';
                     const calYear = mi < 3 ? String(fyNum - 1) : year;
                     const titleText = val === 'paid' ? 'ชำระแล้ว' : val === 'pending' ? 'รออนุมัติ' : val === 'exempted' ? 'ยกเว้นชำระ' : 'ค้างชำระ';
                     const feeText = val === 'exempted' ? '฿0' : `฿${monthFees[mi]}`;
-                    // Highlight fee change month
+                    // Highlight fee change month & dim months outside selected range slightly
                     const isChangeMonth = feeChangeMonths.includes(mi);
-                    const changeStyle = isChangeMonth ? 'border-left: 3px solid #f59e0b !important;' : '';
-                    return `<td class="month-cell ${cls}" style="${changeStyle}" onclick="showMonthDetail('${c.id}','${mk}','${WASTE_MONTHS[mi]}','${val}','${year}','${calYear}')" title="${WASTE_MONTHS[mi]} ${calYear.substring(2)} - ${titleText} | ค่าธรรมเนียม: ${feeText}">${icon}<br><span style="font-size:0.55rem;opacity:0.7;">${feeText}</span></td>`;
+                    const inRange = mi >= range.startIdx && mi <= range.endIdx;
+                    let cellStyle = isChangeMonth ? 'border-left: 3px solid #f59e0b !important;' : '';
+                    if (!inRange && (range.startIdx > 0 || range.endIdx < 11)) {
+                        cellStyle += 'opacity: 0.4;';
+                    }
+                    const cellContent = val === 'paid' ? '✓' : val === 'pending' ? '◷' : val === 'exempted' ? '-' : '';
+                    return `<td class="month-cell ${cls}" style="${cellStyle}" onclick="showMonthDetail('${c.id}','${mk}','${WASTE_MONTHS[mi]}','${val}','${year}','${calYear}')" title="${WASTE_MONTHS[mi]} ${calYear.substring(2)} - ${titleText} | ค่าธรรมเนียม: ${feeText}">${cellContent}</td>`;
                 }).join('');
 
                 // Fee display: show current fee, or show change indicator
@@ -444,8 +859,8 @@
                     }
                 }
 
-                return `<tr><td class="ps-3 text-muted">${startIdx + idx + 1}</td><td class="fw-semibold">${c.name}</td><td>${c.house_no} ม.${c.moo}</td><td class="text-end fw-semibold text-primary" style="font-size:0.78rem;">${feeDisplay}</td>${monthCells}</tr>`;
-            }).join('') || '<tr><td colspan="16" class="text-center py-4 text-muted">ไม่พบข้อมูล</td></tr>';
+                return `<tr><td class="col-seq text-muted">${startIdx + idx + 1}</td><td class="col-name fw-semibold">${c.name}</td><td class="col-house">${c.house_no} ม.${c.moo}</td><td class="col-fee fw-semibold text-primary" style="font-size:0.78rem;">${feeDisplay}</td>${monthCells}</tr>`;
+            }).join('') || '<tr><td colspan="16" class="text-center py-4 text-muted">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td></tr>';
 
             // Render footer with monthly summary (All filtered data)
             const foot = document.getElementById('kor3Foot');
@@ -597,7 +1012,7 @@
                 cancelButtonColor: '#057a55'
             }).then(result => {
                 if (result.dismiss === Swal.DismissReason.cancel && status === 'unpaid') {
-                    window.location.href = 'waste-payments.html';
+                    window.location.href = `waste-payments.html?tab=walkin&customer_id=${encodeURIComponent(customerId)}&month=${encodeURIComponent(monthKey)}&year=${encodeURIComponent(fiscalYear)}`;
                 }
             });
         }
@@ -606,6 +1021,7 @@
             const year = kor3SelectedYear || getCurrentFiscalYear();
             let customers = getWasteCustomers().filter(c => c.status === 'active');
             const ms = getMonthlyStatus();
+            const range = getSelectedMonthRange();
             
             // Apply current filters so printed data matches screen
             const q = (document.getElementById('kor3Search').value || '').toLowerCase();
@@ -613,16 +1029,10 @@
             const statusFilter = document.getElementById('kor3Status').value;
             
             if (q) customers = customers.filter(c => c.name.toLowerCase().includes(q) || c.house_no.includes(q));
-            if (moo) customers = customers.filter(c => c.moo === moo);
-            
-            if (statusFilter === 'has_unpaid') customers = customers.filter(c => {
-                const yearData = (ms[c.id] || {})[year] || {};
-                return WASTE_MONTH_KEYS.some(mk => yearData[mk] !== 'paid');
-            });
-            if (statusFilter === 'all_paid') customers = customers.filter(c => {
-                const yearData = (ms[c.id] || {})[year] || {};
-                return WASTE_MONTH_KEYS.every(mk => yearData[mk] === 'paid');
-            });
+            if (moo) customers = customers.filter(c => String(c.moo) === String(moo));
+            if (statusFilter) {
+                customers = customers.filter(c => matchesStatusInRange((ms[c.id] || {})[year] || {}, range.keys, statusFilter));
+            }
 
             const monthSumsFee = new Array(12).fill(0);
             const monthSumsPaid = new Array(12).fill(0);
@@ -659,7 +1069,7 @@
             tfootHtml += '</tr>';
 
             const localSettings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
-            const orgName = localSettings.org_name || 'เทศบาลตำบลเหมืองหม้อ';
+            const orgName = localSettings.org_name || 'เทศบาลเมืองบ้านเป็ด';
 
             let html = `<!DOCTYPE html>
 <html lang="th">
@@ -683,7 +1093,7 @@
 </head>
 <body>
     <button class="print-btn" onclick="window.print()">พิมพ์ / PDF</button>
-    <h3>กค.3 ประจำปีงบประมาณ ${year}<br><span style="font-size: 14px; font-weight: normal;">${orgName}</span></h3>
+    <h3>กค.3 ประจำปีงบประมาณ ${year} (${range.labelFull})<br><span style="font-size: 14px; font-weight: normal;">${orgName} • จำนวน ${customers.length} ราย</span></h3>
     <table>
         <thead>
             <tr>
@@ -725,6 +1135,7 @@
             const year = kor3SelectedYear || getCurrentFiscalYear();
             let customers = getWasteCustomers().filter(c => c.status === 'active');
             const ms = getMonthlyStatus();
+            const range = getSelectedMonthRange();
             
             // Apply current filters so exported data matches screen
             const q = (document.getElementById('kor3Search').value || '').toLowerCase();
@@ -732,16 +1143,10 @@
             const statusFilter = document.getElementById('kor3Status').value;
             
             if (q) customers = customers.filter(c => c.name.toLowerCase().includes(q) || c.house_no.includes(q));
-            if (moo) customers = customers.filter(c => c.moo === moo);
-            
-            if (statusFilter === 'has_unpaid') customers = customers.filter(c => {
-                const yearData = (ms[c.id] || {})[year] || {};
-                return WASTE_MONTH_KEYS.some(mk => yearData[mk] !== 'paid');
-            });
-            if (statusFilter === 'all_paid') customers = customers.filter(c => {
-                const yearData = (ms[c.id] || {})[year] || {};
-                return WASTE_MONTH_KEYS.every(mk => yearData[mk] === 'paid');
-            });
+            if (moo) customers = customers.filter(c => String(c.moo) === String(moo));
+            if (statusFilter) {
+                customers = customers.filter(c => matchesStatusInRange((ms[c.id] || {})[year] || {}, range.keys, statusFilter));
+            }
 
             const monthSumsFee = new Array(12).fill(0);
             const monthSumsPaid = new Array(12).fill(0);

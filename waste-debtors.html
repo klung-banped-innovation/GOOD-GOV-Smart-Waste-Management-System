@@ -39,27 +39,119 @@
         </div>
 
         <!-- Year Selector -->
-        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-            <span class="fw-semibold text-muted" style="font-size:0.85rem;"><i class="fa-solid fa-calendar-days me-1"></i>ปีงบประมาณ:</span>
-            <div class="btn-group" id="yearBtnGroup" role="group"></div>
+        <div class="d-flex align-items-center justify-content-between gap-2 mb-3 flex-wrap">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="fw-semibold text-muted" style="font-size:0.85rem;"><i class="fa-solid fa-calendar-days me-1"></i>ปีงบประมาณ:</span>
+                <div class="btn-group" id="yearBtnGroup" role="group"></div>
+            </div>
+            <div id="debtorPeriodBadge"></div>
         </div>
 
-        <!-- Summary Cards -->
-        <div class="row g-3 mb-4">
-            <div class="col-6 col-lg-3"><div class="kpi-card"><div class="d-flex justify-content-between align-items-start"><div><div class="kpi-label mb-1">ลูกหนี้ทั้งหมด</div><div class="kpi-value text-danger" id="debtTotal">-</div></div><div class="kpi-icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-users"></i></div></div></div></div>
-            <div class="col-6 col-lg-3"><div class="kpi-card"><div class="d-flex justify-content-between align-items-start"><div><div class="kpi-label mb-1">ยอดค้างรวม (บาท)</div><div class="kpi-value text-danger" id="debtAmount">-</div></div><div class="kpi-icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-coins"></i></div></div></div></div>
-            <div class="col-6 col-lg-3"><div class="kpi-card"><div class="d-flex justify-content-between align-items-start"><div><div class="kpi-label mb-1">ค้าง 1-2 เดือน</div><div class="kpi-value text-warning" id="debt12">-</div></div><div class="kpi-icon bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-clock"></i></div></div></div></div>
-            <div class="col-6 col-lg-3"><div class="kpi-card"><div class="d-flex justify-content-between align-items-start"><div><div class="kpi-label mb-1">ค้างเกิน 6 เดือน</div><div class="kpi-value text-danger" id="debt6plus">-</div></div><div class="kpi-icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-triangle-exclamation"></i></div></div></div></div>
+        <!-- Summary Cards (Dashboard) -->
+        <div class="row g-3 mb-4" id="debtorDashboardCards">
+            <!-- Card 1: จำนวนลูกค้าทั้งหมด -->
+            <div class="col-6 col-md-4 col-xl">
+                <div class="kpi-card h-100" style="border-top: 4px solid #1a56db;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">จำนวนลูกค้าทั้งหมด</div>
+                            <div class="kpi-value text-primary" id="cardTotalCustomers">-</div>
+                            <div class="text-xs text-muted mt-1" id="cardTotalCustomersSub">ครัวเรือนที่ใช้งาน</div>
+                        </div>
+                        <div class="kpi-icon bg-primary bg-opacity-10 text-primary"><i class="fa-solid fa-users"></i></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Card 2: ยอดที่ 1 ประมาณการรายได้ -->
+            <div class="col-6 col-md-4 col-xl">
+                <div class="kpi-card h-100" style="border-top: 4px solid #0ea5e9;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">ประมาณการรายได้ (บาท)</div>
+                            <div class="kpi-value text-info" id="cardEstRevenue">-</div>
+                            <div class="text-xs text-muted mt-1" id="cardEstRevenueSub">คำนวณจากยอดลูกค้าทั้งหมด</div>
+                        </div>
+                        <div class="kpi-icon bg-info bg-opacity-10 text-info"><i class="fa-solid fa-chart-line"></i></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Card 3: ยอดที่ 2 ยอดค้างรวม -->
+            <div class="col-6 col-md-4 col-xl">
+                <div class="kpi-card h-100" style="border-top: 4px solid #dc2626;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">ยอดค้างรวม (บาท)</div>
+                            <div class="kpi-value text-danger" id="debtAmount">-</div>
+                            <div class="text-xs text-muted mt-1" id="cardDebtAmountSub">ยอดค้างในช่วงเดือนที่เลือก</div>
+                        </div>
+                        <div class="kpi-icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-coins"></i></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Card 4: จำนวนลูกค้าที่จ่ายครบ -->
+            <div class="col-6 col-md-6 col-xl">
+                <div class="kpi-card h-100" style="border-top: 4px solid #16a34a;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">จำนวนลูกค้าที่จ่ายครบ</div>
+                            <div class="kpi-value text-success" id="cardPaidCustomers">-</div>
+                            <div class="text-xs text-success fw-semibold mt-1" id="cardPaidCustomersSub">ชำระครบในช่วงเดือนที่เลือก</div>
+                        </div>
+                        <div class="kpi-icon bg-success bg-opacity-10 text-success"><i class="fa-solid fa-circle-check"></i></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Card 5: จำนวนค้าง (แสดงเดือนที่กรอง เช่น ต.ค.-ธ.ค. 3 เดือน จำนวน ... ราย) -->
+            <div class="col-12 col-md-6 col-xl">
+                <div class="kpi-card h-100" style="border-top: 4px solid #ea580c;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark" id="cardUnpaidTitle">จำนวนค้าง (ต.ค.-ก.ย. 12 เดือน)</div>
+                            <div class="kpi-value text-danger" id="debtTotal">-</div>
+                            <div class="text-xs text-danger fw-semibold mt-1" id="cardUnpaidSub">ค้าง 1-2 ด.: <span id="debt12">0</span> ราย • เกิน 6 ด.: <span id="debt6plus">0</span> ราย</div>
+                        </div>
+                        <div class="kpi-icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-user-clock"></i></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Filters -->
         <div class="card mb-4">
             <div class="card-body py-3">
                 <div class="row g-2 align-items-center">
-                    <div class="col-md-3"><input type="text" class="form-control form-control-sm" id="debtSearch" placeholder="ค้นหาชื่อ / บ้านเลขที่..." oninput="renderDebtors()"></div>
-                    <div class="col-md-2"><select class="form-select form-select-sm" id="debtFilter" onchange="renderDebtors()"><option value="">ทุกระดับ</option><option value="1-2">ค้าง 1-2 เดือน</option><option value="3-6">ค้าง 3-6 เดือน</option><option value="6+">เกิน 6 เดือน</option></select></div>
-                    <div class="col-md-2">
-                        <select class="form-select form-select-sm" id="debtStartMonth" onchange="renderDebtors()">
+                    <div class="col-md-2"><input type="text" class="form-control form-control-sm" id="debtSearch" placeholder="ค้นหาชื่อ / บ้านเลขที่..." oninput="debtorPage=1; renderDebtors()"></div>
+                    <div class="col-6 col-md-2">
+                        <select class="form-select form-select-sm" id="debtMooFilter" onchange="debtorPage=1; renderDebtors()">
+                            <option value="">ทุกหมู่</option>
+                            <option value="1">หมู่ 1</option>
+                            <option value="2">หมู่ 2</option>
+                            <option value="3">หมู่ 3</option>
+                            <option value="4">หมู่ 4</option>
+                            <option value="5">หมู่ 5</option>
+                            <option value="6">หมู่ 6</option>
+                            <option value="7">หมู่ 7</option>
+                            <option value="8">หมู่ 8</option>
+                            <option value="9">หมู่ 9</option>
+                            <option value="10">หมู่ 10</option>
+                            <option value="11">หมู่ 11</option>
+                            <option value="12">หมู่ 12</option>
+                            <option value="13">หมู่ 13</option>
+                            <option value="14">หมู่ 14</option>
+                            <option value="15">หมู่ 15</option>
+                            <option value="16">หมู่ 16</option>
+                            <option value="17">หมู่ 17</option>
+                            <option value="18">หมู่ 18</option>
+                            <option value="19">หมู่ 19</option>
+                            <option value="20">หมู่ 20</option>
+                            <option value="21">หมู่ 21</option>
+                            <option value="22">หมู่ 22</option>
+                            <option value="23">หมู่ 23</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2"><select class="form-select form-select-sm" id="debtFilter" onchange="debtorPage=1; renderDebtors()"><option value="">ทุกระดับการค้าง</option><option value="1-2">ค้าง 1-2 เดือน</option><option value="3-6">ค้าง 3-6 เดือน</option><option value="6+">เกิน 6 เดือน</option></select></div>
+                    <div class="col-6 col-md-1">
+                        <select class="form-select form-select-sm" id="debtStartMonth" onchange="debtorPage=1; renderDebtors()">
                             <option value="0">ตั้งแต่ ต.ค.</option>
                             <option value="1">ตั้งแต่ พ.ย.</option>
                             <option value="2">ตั้งแต่ ธ.ค.</option>
@@ -74,8 +166,8 @@
                             <option value="11">ตั้งแต่ ก.ย.</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <select class="form-select form-select-sm" id="debtEndMonth" onchange="renderDebtors()">
+                    <div class="col-6 col-md-1">
+                        <select class="form-select form-select-sm" id="debtEndMonth" onchange="debtorPage=1; renderDebtors()">
                             <option value="0">ถึง ต.ค.</option>
                             <option value="1">ถึง พ.ย.</option>
                             <option value="2">ถึง ธ.ค.</option>
@@ -89,6 +181,18 @@
                             <option value="10">ถึง ส.ค.</option>
                             <option value="11" selected>ถึง ก.ย.</option>
                         </select>
+                    </div>
+                    <div class="col-10 col-md-3">
+                        <div class="input-group input-group-sm" title="กำหนดชำระภายในวันที่ (แสดงในหนังสือทวงหนี้)">
+                            <span class="input-group-text bg-danger bg-opacity-10 text-danger fw-semibold border-danger border-opacity-25">
+                                <i class="fa-solid fa-calendar-check me-1"></i>กำหนดชำระ
+                            </span>
+                            <input type="date" class="form-control form-control-sm border-danger border-opacity-25 fw-semibold" id="debtDueDate" onchange="onDebtDueDateChange(this.value)">
+                            <span class="input-group-text bg-white text-danger fw-bold border-danger border-opacity-25" id="debtDueDateThaiPreview" style="font-size: 0.78rem;">-</span>
+                        </div>
+                    </div>
+                    <div class="col-2 col-md-1 text-end">
+                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetDebtorFilters()" title="รีเซ็ตตัวกรอง"><i class="fa-solid fa-rotate-left"></i></button>
                     </div>
                 </div>
             </div>
@@ -106,6 +210,10 @@
                         <tbody id="debtorTableBody"></tbody>
                     </table>
                 </div>
+                <div class="d-flex justify-content-between align-items-center p-3 border-top bg-light flex-wrap gap-2">
+                    <div class="text-muted text-xs" id="debtorPageInfo"></div>
+                    <ul class="pagination pagination-sm mb-0" id="debtorPagination"></ul>
+                </div>
             </div>
         </div>
     </div>
@@ -119,6 +227,8 @@
 <script src="assets/js/responsive.js"></script>
 <script>
 let debtorSelectedYear = '';
+let debtorPage = 1;
+const debtorPageSize = 50;
 
 document.addEventListener('DOMContentLoaded', async function() {
     Swal.fire({
@@ -136,6 +246,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             fetchMonthlyStatus()
         ]);
         initYearSelector();
+        initDebtDueDate();
         renderDebtors();
         Swal.close();
     } catch (error) {
@@ -148,16 +259,64 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 });
 
+function formatIsoToThaiSlashDate(isoStr) {
+    if (!isoStr) return '-';
+    const parts = isoStr.split('-');
+    if (parts.length !== 3) return isoStr;
+    let y = parseInt(parts[0], 10);
+    if (y < 2400) y += 543;
+    return `${parts[2]}/${parts[1]}/${y}`;
+}
+
+function initDebtDueDate() {
+    const input = document.getElementById('debtDueDate');
+    if (!input) return;
+    let saved = localStorage.getItem('waste_debt_due_date');
+    if (!saved) {
+        const d = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        saved = `${yyyy}-${mm}-${dd}`;
+        localStorage.setItem('waste_debt_due_date', saved);
+    }
+    input.value = saved;
+    const preview = document.getElementById('debtDueDateThaiPreview');
+    if (preview) preview.textContent = formatIsoToThaiSlashDate(saved);
+}
+
+function onDebtDueDateChange(val) {
+    if (val) {
+        localStorage.setItem('waste_debt_due_date', val);
+    } else {
+        localStorage.removeItem('waste_debt_due_date');
+    }
+    const preview = document.getElementById('debtDueDateThaiPreview');
+    if (preview) preview.textContent = formatIsoToThaiSlashDate(val);
+}
+
 function initYearSelector() {
     const ms = getMonthlyStatus();
     const cy = getCurrentFiscalYear();
-    const cyNum = parseInt(cy);
-    const yearSet = new Set([String(cyNum - 1), cy, String(cyNum + 1)]);
+    const cyNum = parseInt(cy, 10);
+    const maxAllowedYear = cyNum + 1;
+    const minDefaultYear = cyNum - 2;
+
+    const yearSet = new Set();
+    for (let y = minDefaultYear; y <= maxAllowedYear; y++) {
+        yearSet.add(String(y));
+    }
+
     Object.values(ms).forEach(customerYears => {
-        Object.keys(customerYears).forEach(y => yearSet.add(y));
+        Object.keys(customerYears).forEach(y => {
+            const yNum = parseInt(y, 10);
+            if (!isNaN(yNum) && yNum >= 2565 && yNum <= maxAllowedYear) {
+                const monthObj = customerYears[y] || {};
+                const hasRealRecord = Object.values(monthObj).some(st => st === 'paid' || st === 'pending');
+                if (hasRealRecord) yearSet.add(String(yNum));
+            }
+        });
     });
-    const customYears = getWasteData('customYears');
-    if (Array.isArray(customYears)) customYears.forEach(y => yearSet.add(y));
 
     const years = Array.from(yearSet).sort();
     debtorSelectedYear = cy;
@@ -176,6 +335,22 @@ function selectYear(year, btn) {
     });
     btn.classList.remove('btn-outline-secondary');
     btn.classList.add('active', 'btn-primary');
+    debtorPage = 1;
+    renderDebtors();
+}
+
+function resetDebtorFilters() {
+    document.getElementById('debtSearch').value = '';
+    if (document.getElementById('debtMooFilter')) document.getElementById('debtMooFilter').value = '';
+    document.getElementById('debtFilter').value = '';
+    document.getElementById('debtStartMonth').value = '0';
+    document.getElementById('debtEndMonth').value = '11';
+    debtorPage = 1;
+    renderDebtors();
+}
+
+function goDebtorPage(p) {
+    debtorPage = p;
     renderDebtors();
 }
 
@@ -188,31 +363,112 @@ function renderDebtors() {
     const startSelect = document.getElementById('debtStartMonth');
     const endSelect = document.getElementById('debtEndMonth');
     if (startSelect && endSelect) {
-        startIdx = parseInt(startSelect.value);
-        endIdx = parseInt(endSelect.value);
-        // Ensure start <= end
+        startIdx = parseInt(startSelect.value, 10);
+        endIdx = parseInt(endSelect.value, 10);
         if (startIdx > endIdx) {
-            const temp = startIdx;
-            startIdx = endIdx;
-            endIdx = temp;
+            endIdx = startIdx;
+            endSelect.value = String(endIdx);
         }
     }
-    
-    let debtors = calculateDebtors(year, startIdx, endIdx);
-    const q = (document.getElementById('debtSearch').value||'').toLowerCase();
+
+    const monthCount = (endIdx - startIdx) + 1;
+    const rangeLabelShort = startIdx === endIdx
+        ? `${WASTE_MONTHS[startIdx]}`
+        : `${WASTE_MONTHS[startIdx]}-${WASTE_MONTHS[endIdx]}`;
+    const rangeDesc = `${rangeLabelShort} ${monthCount} เดือน`;
+
+    const q = (document.getElementById('debtSearch').value || '').toLowerCase().trim();
+    const mooFilter = document.getElementById('debtMooFilter') ? document.getElementById('debtMooFilter').value : '';
     const f = document.getElementById('debtFilter').value;
+
+    // 1. คำนวณข้อมูลลูกค้าที่ใช้งานทั้งหมด (ตามตัวกรองหมู่/คำค้นหา) เพื่อหา:
+    // - จำนวนลูกค้าทั้งหมด
+    // - ยอดที่ 1 ประมาณการรายได้ (เอายอดทั้งหมดมาคำนวณในช่วงเดือนที่เลือก และทั้งปี)
+    // - จำนวนลูกค้าที่จ่ายครบในช่วงเดือนที่เลือก
+    let activeCustomers = getWasteCustomers().filter(c => c.status === 'active');
+    if (mooFilter) activeCustomers = activeCustomers.filter(c => String(c.moo) === String(mooFilter));
+    if (q) activeCustomers = activeCustomers.filter(c => c.name.toLowerCase().includes(q) || c.house_no.includes(q));
+
+    const ms = getMonthlyStatus();
+    let estRevenueRange = 0;
+    let estRevenueFullYear = 0;
+    let paidCompleteCount = 0;
+    let paidAmountInRange = 0;
+
+    activeCustomers.forEach(c => {
+        const yearData = (ms[c.id] || {})[year] || {};
+        const fee = Number(c.fee) || 0;
+        estRevenueFullYear += (fee * 12);
+
+        let allPaidInWindow = true;
+        for (let i = startIdx; i <= endIdx; i++) {
+            const mk = WASTE_MONTH_KEYS[i];
+            const st = yearData[mk] || 'unpaid';
+            if (st !== 'exempted') {
+                estRevenueRange += fee;
+            }
+            if (st === 'paid') {
+                paidAmountInRange += fee;
+            } else if (st !== 'exempted') {
+                allPaidInWindow = false;
+            }
+        }
+        if (allPaidInWindow) {
+            paidCompleteCount++;
+        }
+    });
+
+    // 2. คำนวณรายการลูกหนี้ค้างชำระในช่วงเดือนที่เลือก
+    let debtors = calculateDebtors(year, startIdx, endIdx);
+    if (mooFilter) debtors = debtors.filter(d => String(d.moo) === String(mooFilter));
     if (q) debtors = debtors.filter(d => d.name.toLowerCase().includes(q) || d.house_no.includes(q));
     if (f === '1-2') debtors = debtors.filter(d => d.unpaid_count <= 2);
     else if (f === '3-6') debtors = debtors.filter(d => d.unpaid_count >= 3 && d.unpaid_count <= 6);
     else if (f === '6+') debtors = debtors.filter(d => d.unpaid_count > 6);
 
-    document.getElementById('debtTotal').textContent = debtors.length;
-    document.getElementById('debtAmount').textContent = formatMoney(debtors.reduce((s,d) => s + d.total_debt, 0));
-    document.getElementById('debt12').textContent = debtors.filter(d => d.unpaid_count <= 2).length;
-    document.getElementById('debt6plus').textContent = debtors.filter(d => d.unpaid_count > 6).length;
+    const totalDebtAmount = debtors.reduce((s, d) => s + d.total_debt, 0);
+
+    // 3. อัปเดตการ์ด Dashboard ทั้ง 5 ใบ
+    const periodBadge = document.getElementById('debtorPeriodBadge');
+    if (periodBadge) {
+        periodBadge.innerHTML = `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2" style="font-size:0.8rem;">
+            <i class="fa-solid fa-filter me-1"></i>ช่วงเดือนที่กรอง: <b>${rangeLabelShort} (${monthCount} เดือน)</b> ${mooFilter ? `• หมู่ที่ ${mooFilter}` : '• ทุกหมู่'}
+        </span>`;
+    }
+
+    // การ์ด 1: จำนวนลูกค้าทั้งหมด ... ราย
+    document.getElementById('cardTotalCustomers').innerHTML = `${formatMoney(activeCustomers.length)} <span class="fs-6 fw-normal text-muted">ราย</span>`;
+    document.getElementById('cardTotalCustomersSub').textContent = mooFilter ? `ครัวเรือนที่ใช้งาน (หมู่ที่ ${mooFilter})` : 'ครัวเรือนที่ใช้งานทั้งหมด';
+
+    // การ์ด 2: ยอดที่ 1 ประมาณการรายได้ ..... บาท (เอายอดทั้งหมดมาคำนวณ)
+    document.getElementById('cardEstRevenue').innerHTML = `฿${formatMoney(estRevenueRange)}`;
+    document.getElementById('cardEstRevenueSub').textContent = monthCount === 12
+        ? `คำนวณจากทั้งหมด ${formatMoney(activeCustomers.length)} ราย (12 เดือน)`
+        : `ช่วง ${rangeDesc} (ทั้งปี 12 ด.: ฿${formatMoney(estRevenueFullYear)})`;
+
+    // การ์ด 3: ยอดที่ 2 ยอดค้างรวม
+    document.getElementById('debtAmount').innerHTML = `฿${formatMoney(totalDebtAmount)}`;
+    document.getElementById('cardDebtAmountSub').textContent = `ค้างช่วง ${rangeDesc} (รับชำระแล้ว: ฿${formatMoney(paidAmountInRange)})`;
+
+    // การ์ด 4: จำนวนลูกค้าที่จ่ายครบ .... ราย
+    document.getElementById('cardPaidCustomers').innerHTML = `${formatMoney(paidCompleteCount)} <span class="fs-6 fw-normal text-muted">ราย</span>`;
+    document.getElementById('cardPaidCustomersSub').textContent = `จ่ายครบในช่วง ${rangeDesc}`;
+
+    // การ์ด 5: จำนวนค้าง แสดงเดือนที่กรอง เช่น ต.ค.-ธ.ค. 3 เดือน จำนวน .... ราย
+    document.getElementById('cardUnpaidTitle').textContent = `จำนวนค้าง (${rangeDesc})`;
+    document.getElementById('debtTotal').innerHTML = `${formatMoney(debtors.length)} <span class="fs-6 fw-normal text-muted">ราย</span>`;
+    document.getElementById('debt12').textContent = formatMoney(debtors.filter(d => d.unpaid_count <= 2).length);
+    document.getElementById('debt6plus').textContent = formatMoney(debtors.filter(d => d.unpaid_count > 6).length);
+
+    // 4. แบ่งหน้าตาราง (Pagination) เพื่อให้แสดงผลรวดเร็วแม้มี 19,000+ รายการ
+    const totalItems = debtors.length;
+    const totalPages = Math.ceil(totalItems / debtorPageSize) || 1;
+    if (debtorPage > totalPages) debtorPage = totalPages;
+    const sliceStart = (debtorPage - 1) * debtorPageSize;
+    const pageDebtors = debtors.slice(sliceStart, sliceStart + debtorPageSize);
 
     const tbody = document.getElementById('debtorTableBody');
-    tbody.innerHTML = debtors.length ? debtors.map(d => `<tr>
+    tbody.innerHTML = pageDebtors.length ? pageDebtors.map(d => `<tr>
         <td class="ps-4 fw-bold">${d.house_no} ม.${d.moo}</td>
         <td>${d.name}</td>
         <td class="fw-semibold text-danger">${d.unpaid_count} เดือน<div class="text-xs text-muted fw-normal">${d.unpaid_months.join(', ')}</div></td>
@@ -224,8 +480,29 @@ function renderDebtors() {
             <button class="btn btn-xs btn-outline-warning me-1" onclick="showLineNotifyModal('${d.id}', 'OVERDUE', '${d.total_debt}', null, null, null, '${d.unpaid_count}', '${d.unpaid_months.join(', ')}')" title="แจ้งเตือน"><i class="fa-solid fa-bell"></i></button>
             <button class="btn btn-xs btn-outline-secondary" onclick="printDebtLetter('${d.id}')" title="พิมพ์ทวงหนี้"><i class="fa-solid fa-print"></i></button>
         </td>
-    </tr>`).join('') : '<tr><td colspan="8" class="text-center py-4 text-muted">ไม่มีลูกหนี้ค้างชำระ</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="8" class="text-center py-4 text-muted">ไม่มีลูกหนี้ค้างชำระในช่วงเดือนที่เลือก</td></tr>';
     
+    // Render Pagination Controls
+    const pInfo = document.getElementById('debtorPageInfo');
+    const pUl = document.getElementById('debtorPagination');
+    if (pInfo && pUl) {
+        if (totalItems > 0) {
+            pInfo.innerHTML = `แสดง ${sliceStart + 1} ถึง ${Math.min(sliceStart + debtorPageSize, totalItems)} จากทั้งหมด <b>${formatMoney(totalItems)}</b> ราย`;
+            let pHtml = `<li class="page-item ${debtorPage === 1 ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="goDebtorPage(${debtorPage - 1})">ก่อนหน้า</a></li>`;
+            let sp = Math.max(1, debtorPage - 2);
+            let ep = Math.min(totalPages, sp + 4);
+            if (ep - sp < 4) sp = Math.max(1, ep - 4);
+            for (let i = sp; i <= ep; i++) {
+                pHtml += `<li class="page-item ${i === debtorPage ? 'active' : ''}"><a class="page-link" href="javascript:void(0)" onclick="goDebtorPage(${i})">${i}</a></li>`;
+            }
+            pHtml += `<li class="page-item ${debtorPage === totalPages ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="goDebtorPage(${debtorPage + 1})">ถัดไป</a></li>`;
+            pUl.innerHTML = pHtml;
+        } else {
+            pInfo.innerHTML = 'แสดง 0 รายการ';
+            pUl.innerHTML = '';
+        }
+    }
+
     // Store globally for printAllDebtLetters
     window.currentFilteredDebtors = debtors;
 }

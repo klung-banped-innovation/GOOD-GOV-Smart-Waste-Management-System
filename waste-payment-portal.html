@@ -1191,22 +1191,6 @@
             const modalEl = document.getElementById('registerWasteModal');
             if (modalEl) {
                 modalEl.addEventListener('shown.bs.modal', async function () {
-            // Load fee types
-            const typeSelect = document.getElementById('regType');
-            if (typeSelect.options.length <= 1) {
-                try {
-                    const { data } = await supabaseClient.from('waste_fee_types').select('*').order('fee', {ascending: true});
-                    if (data) {
-                        typeSelect.innerHTML = '<option value="" disabled selected>เลือกประเภท</option>' + 
-                            data.map(f => `<option value="${f.type}">${f.type} (${f.fee} ฿/เดือน)</option>`).join('');
-                    } else {
-                        typeSelect.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดข้อมูลได้</option>';
-                    }
-                } catch (e) {
-                    typeSelect.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดข้อมูลได้</option>';
-                }
-            }
-
             if (!registerMap) {
                 registerMap = L.map('regMap').setView([13.736717, 100.523186], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(registerMap);
@@ -1447,7 +1431,9 @@
                         <div class="mb-3">
                             <label class="form-label text-sm fw-semibold">ประเภทอาคาร/สถานที่</label>
                             <select class="form-select form-select-sm" id="regType" required>
-                                <option value="" disabled selected>กำลังโหลดข้อมูล...</option>
+                                <option value="" disabled selected>เลือกประเภท</option>
+                                <option value="ประกอบกิจการ">1. ประกอบกิจการ</option>
+                                <option value="บ้านทั่วไป">2. บ้านทั่วไป</option>
                             </select>
                         </div>
                         <div class="mb-3">
