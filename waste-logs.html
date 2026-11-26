@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOG ประวัติการใช้งาน - GOOD GOV</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .log-tab-pill {
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            padding: 6px 16px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #334155;
+            transition: all 0.2s;
+        }
+        .log-tab-pill.active {
+            background: linear-gradient(135deg, #1a56db, #2563eb);
+            color: #fff;
+            border-color: #1a56db;
+            box-shadow: 0 3px 10px rgba(26, 86, 219, 0.2);
+        }
+        .log-tab-pill:hover:not(.active) {
+            background: #f1f5f9;
+        }
+        .action-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .act-create { background: #dcfce7; color: #166534; }
+        .act-update { background: #dbeafe; color: #1e40af; }
+        .act-delete { background: #fee2e2; color: #991b1b; }
+        .act-payment { background: #d1fae5; color: #065f46; }
+        .act-approve { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+        .act-reject { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+        .act-exempt { background: #fef3c7; color: #92400e; }
+        .act-usage { background: #f1f5f9; color: #334155; }
+        .act-auth { background: #ede9fe; color: #5b21b6; }
+        .act-setting { background: #e0f2fe; color: #0369a1; }
+    </style>
+</head>
+<body>
+<nav id="sidebar"></nav>
+<div id="content">
+    <div id="top-navbar" class="top-navbar" data-title="LOG ประวัติการแก้ไข และประวัติการใช้งานระบบ"></div>
+    <div class="page-content">
+        <!-- Header -->
+        <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+            <div>
+                <h4 class="fw-bold mb-1">
+                    <i class="fa-solid fa-clock-rotate-left text-primary me-2"></i>LOG ประวัติการแก้ไข &amp; ประวัติการใช้งานระบบ
+                </h4>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0" style="font-size:0.8rem;">
+                        <li class="breadcrumb-item"><a href="dashboard.html" class="text-decoration-none">แดชบอร์ด</a></li>
+                        <li class="breadcrumb-item"><a href="finance.html" class="text-decoration-none">กองคลัง</a></li>
+                        <li class="breadcrumb-item"><a href="waste-dashboard.html" class="text-decoration-none">ค่าธรรมเนียมขยะ</a></li>
+                        <li class="breadcrumb-item active">LOG ประวัติการใช้งาน</li>
+                    </ol>
+                </nav>
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <button class="btn btn-sm btn-outline-primary fw-semibold" onclick="refreshAllSystemLogs()">
+                    <i class="fa-solid fa-rotate me-1"></i>รีเฟรชข้อมูล
+                </button>
+                <button class="btn btn-sm btn-outline-success fw-semibold" onclick="exportLogsExcel()">
+                    <i class="fa-solid fa-file-excel me-1"></i>Export Excel
+                </button>
+                <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="exportLogsPDF()">
+                    <i class="fa-solid fa-file-pdf me-1"></i>พิมพ์รายงาน PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- KPI Summary Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #1a56db;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">บันทึก LOG ทั้งหมด</div>
+                            <div class="kpi-value text-primary" id="kpiTotalLogs">0</div>
+                            <div class="text-xs text-muted mt-1" id="kpiTotalLogsSub">รายการตามตัวกรอง</div>
+                        </div>
+                        <div class="kpi-icon bg-primary bg-opacity-10 text-primary"><i class="fa-solid fa-list-check"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #0ea5e9;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">ประวัติการแก้ไขข้อมูล</div>
+                            <div class="kpi-value text-info" id="kpiEditLogs">0</div>
+                            <div class="text-xs text-muted mt-1">ลูกค้า / เจ้าหน้าที่ / ตั้งค่า / คำขอ</div>
+                        </div>
+                        <div class="kpi-icon bg-info bg-opacity-10 text-info"><i class="fa-solid fa-pen-to-square"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #16a34a;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">ธุรกรรมการรับชำระเงิน</div>
+                            <div class="kpi-value text-success" id="kpiPaymentLogs">0</div>
+                            <div class="text-xs text-muted mt-1">ออกใบเสร็จ / อนุมัติ / ยกเว้น</div>
+                        </div>
+                        <div class="kpi-icon bg-success bg-opacity-10 text-success"><i class="fa-solid fa-receipt"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #7c3aed;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1 fw-semibold text-dark">การเข้าใช้งานระบบ</div>
+                            <div class="kpi-value" style="color:#7c3aed;" id="kpiUsageLogs">0</div>
+                            <div class="text-xs text-muted mt-1" id="kpiActiveUsersSub">เข้าสู่ระบบ / เปิดใช้งานเมนู</div>
+                        </div>
+                        <div class="kpi-icon" style="background:rgba(124,58,237,0.1);color:#7c3aed;"><i class="fa-solid fa-user-shield"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <button type="button" class="log-tab-pill active" onclick="setLogCategoryFilter('all', this)">
+                <i class="fa-solid fa-layer-group me-1"></i>ทั้งหมด
+            </button>
+            <button type="button" class="log-tab-pill" onclick="setLogCategoryFilter('edit_group', this)">
+                <i class="fa-solid fa-pen-to-square me-1 text-primary"></i>ประวัติการแก้ไขข้อมูล (Audit Log)
+            </button>
+            <button type="button" class="log-tab-pill" onclick="setLogCategoryFilter('payment', this)">
+                <i class="fa-solid fa-hand-holding-dollar me-1 text-success"></i>ประวัติรับชำระ / ใบเสร็จ / ยกเว้น
+            </button>
+            <button type="button" class="log-tab-pill" onclick="setLogCategoryFilter('request', this)">
+                <i class="fa-solid fa-file-circle-check me-1 text-warning"></i>คำขอขึ้นทะเบียน / ยกเลิกบริการ
+            </button>
+            <button type="button" class="log-tab-pill" onclick="setLogCategoryFilter('usage_group', this)">
+                <i class="fa-solid fa-desktop me-1 text-info"></i>ประวัติการเข้าใช้งานระบบ (Usage Log)
+            </button>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-4">
+            <div class="card-body py-3">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                            <input type="text" class="form-control" id="logSearchInput" placeholder="ค้นหาชื่อผู้ทำรายการ, บ้านเลขที่, รายละเอียด..." oninput="logCurrentPage=1; renderLogTable()">
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <select class="form-select form-select-sm" id="logModuleFilter" onchange="logCurrentPage=1; renderLogTable()">
+                            <option value="">ทุกเมนู / โมดูล</option>
+                            <option value="ทะเบียนลูกค้า">ทะเบียนลูกค้า</option>
+                            <option value="รับชำระเงิน">รับชำระเงิน</option>
+                            <option value="รายงานรายรับ">รายงานรายรับ</option>
+                            <option value="เจ้าหน้าที่รับชำระ">เจ้าหน้าที่รับชำระ</option>
+                            <option value="คำขอขึ้นทะเบียน">คำขอขึ้นทะเบียน</option>
+                            <option value="คำขอยกเลิกบริการ">คำขอยกเลิกบริการ</option>
+                            <option value="ตั้งค่าระบบขยะ">ตั้งค่าระบบขยะ</option>
+                            <option value="ระบบยืนยันตัวตน">ระบบยืนยันตัวตน</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <select class="form-select form-select-sm" id="logActionFilter" onchange="logCurrentPage=1; renderLogTable()">
+                            <option value="">ทุกประเภทการกระทำ</option>
+                            <option value="CREATE">เพิ่มข้อมูลใหม่</option>
+                            <option value="UPDATE">แก้ไขข้อมูล</option>
+                            <option value="DELETE">ลบข้อมูล</option>
+                            <option value="PAYMENT">รับชำระเงิน / ออกใบเสร็จ</option>
+                            <option value="APPROVE">อนุมัติรายการ</option>
+                            <option value="REJECT">ปฏิเสธรายการ</option>
+                            <option value="EXEMPT">ยกเว้นค่าธรรมเนียม</option>
+                            <option value="LOGIN">เข้าสู่ระบบ</option>
+                            <option value="LOGOUT">ออกจากระบบ</option>
+                            <option value="VIEW_MENU">เข้าใช้งานเมนู</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <select class="form-select form-select-sm" id="logActorFilter" onchange="logCurrentPage=1; renderLogTable()">
+                            <option value="">ทุกผู้ใช้งาน / เจ้าหน้าที่</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-1">
+                        <input type="date" class="form-control form-control-sm" id="logStartDate" title="ตั้งแต่วันที่" onchange="logCurrentPage=1; renderLogTable()">
+                    </div>
+                    <div class="col-6 col-md-1">
+                        <input type="date" class="form-control form-control-sm" id="logEndDate" title="ถึงวันที่" onchange="logCurrentPage=1; renderLogTable()">
+                    </div>
+                    <div class="col-6 col-md-1 text-end">
+                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetLogFilters()" title="ล้างตัวกรอง">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Table -->
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4" style="width: 60px;">ลำดับ</th>
+                                <th style="width: 155px;">วัน-เวลา</th>
+                                <th style="width: 175px;">ผู้ทำรายการ</th>
+                                <th style="width: 150px;">เมนู / ระบบงาน</th>
+                                <th style="width: 160px;">ประเภทกิจกรรม</th>
+                                <th style="width: 190px;">ข้อมูลอ้างอิง / เป้าหมาย</th>
+                                <th>รายละเอียดการดำเนินการ / การแก้ไข</th>
+                                <th class="pe-4 text-center" style="width: 80px;">ดูข้อมูล</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logTableBody">
+                            <tr><td colspan="8" class="text-center py-5 text-muted">กำลังโหลดประวัติการใช้งาน...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center p-3 border-top bg-light flex-wrap gap-2">
+                    <div class="text-muted text-xs" id="logPageInfo"></div>
+                    <ul class="pagination pagination-sm mb-0" id="logPagination"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabase-client.js"></script>
+<script src="assets/js/app.js?v=20261125"></script>
+<script src="assets/js/waste.js?v=20261125"></script>
+<script src="assets/js/responsive.js"></script>
+<script>
+let allSystemLogs = [];
+let currentLogCategoryFilter = 'all';
+let logCurrentPage = 1;
+const logPageSize = 40;
+
+document.addEventListener('DOMContentLoaded', async function() {
+    await refreshAllSystemLogs();
+});
+
+async function refreshAllSystemLogs() {
+    Swal.fire({
+        title: 'กำลังรวบรวมประวัติการใช้งานและประวัติการแก้ไข...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        initWasteData();
+        await Promise.allSettled([
+            (typeof fetchWasteSettings === 'function' ? fetchWasteSettings() : Promise.resolve()),
+            fetchWasteCustomers(),
+            fetchWastePayments(),
+            fetchWasteExemptions(),
+            fetchRegisterRequestsDB(),
+            fetchCancelRequestsDB(),
+            fetchWasteStaff()
+        ]);
+
+        allSystemLogs = await buildComprehensiveSystemLogs();
+        populateActorDropdown(allSystemLogs);
+        renderLogTable();
+        Swal.close();
+    } catch (err) {
+        console.error('Error loading system logs:', err);
+        Swal.close();
+    }
+}
+
+/**
+ * รวบรวม LOG ทั้งจากตาราง waste_system_logs, localStorage และสังเคราะห์ประวัติย้อนหลังจากฐานข้อมูลจริง
+ * (เช่น ประวัติเปลี่ยนค่าธรรมเนียม, ประวัติรับชำระ/ยกเลิกใบเสร็จ, คำขอขึ้นทะเบียน, คำขอยกเลิก, การยกเว้นค่าธรรมเนียม)
+ */
+async function buildComprehensiveSystemLogs() {
+    const logMap = new Map();
+
+    const addLogItem = (item) => {
+        if (!item || !item.id) return;
+        if (!logMap.has(item.id)) {
+            logMap.set(item.id, item);
+        }
+    };
+
+    // 1. ดึงจากตาราง waste_system_logs ใน Supabase (ถ้ามี)
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('waste_system_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(1000);
+            if (!error && Array.isArray(data)) {
+                data.forEach(addLogItem);
+            }
+        } catch (e) {}
+    }
+
+    // 2. ดึงจาก localStorage ('waste_system_logs')
+    try {
+        const localLogs = JSON.parse(localStorage.getItem('waste_system_logs') || '[]');
+        if (Array.isArray(localLogs)) {
+            localLogs.forEach(addLogItem);
+        }
+    } catch (e) {}
+
+    // 3. ดึงประวัติการแก้ไขค่าธรรมเนียมลูกค้า (waste_fee_history)
+    try {
+        const feeHist = typeof getFeeHistory === 'function' ? getFeeHistory() : JSON.parse(localStorage.getItem('waste_fee_history') || '{}');
+        const customers = typeof getWasteCustomers === 'function' ? getWasteCustomers() : [];
+        Object.keys(feeHist || {}).forEach(cid => {
+            const entries = feeHist[cid];
+            if (!Array.isArray(entries)) return;
+            const cust = customers.find(c => c.id === cid);
+            const custLabel = cust ? `${cust.name || '-'} (บ้านเลขที่ ${cust.house_no} ม.${cust.moo})` : `รหัสลูกค้า ${cid}`;
+            entries.forEach((h, idx) => {
+                const ts = h.changed_at ? `${h.changed_at}T09:00:00.000Z` : new Date().toISOString();
+                addLogItem({
+                    id: `HIST-FEE-${cid}-${idx}-${h.changed_at || ''}`,
+                    created_at: ts,
+                    category: 'edit',
+                    action_type: 'UPDATE',
+                    action_label: 'แก้ไขอัตราค่าธรรมเนียมลูกค้า',
+                    module: 'ทะเบียนลูกค้า',
+                    module_key: 'waste-customers',
+                    target_id: cid,
+                    target_name: custLabel,
+                    detail: `ปรับอัตราค่าธรรมเนียมของ ${custLabel} จาก ฿${h.old_fee}/เดือน เป็น ฿${h.new_fee}/เดือน (วันที่มีผล: ${h.changed_at || '-'})`,
+                    actor_name: 'เจ้าหน้าที่ผู้ดูแลทะเบียน',
+                    actor_role: 'Officer',
+                    actor_username: ''
+                });
+            });
+        });
+    } catch (e) {}
+
+    // 4. ดึงประวัติการรับชำระเงิน / ออกใบเสร็จ / ยกเลิกใบเสร็จ จาก waste_payments
+    try {
+        const payments = typeof getWastePayments === 'function' ? getWastePayments() : [];
+        payments.slice(0, 400).forEach(p => {
+            const datePart = p.date || (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+            const timePart = (p.time && /^\d{1,2}:\d{2}/.test(p.time)) ? p.time : '10:00';
+            let isoTs = p.created_at || `${datePart}T${timePart.padStart(5, '0')}:00`;
+            if (isNaN(new Date(isoTs).getTime())) isoTs = new Date().toISOString();
+
+            const monthsTxt = Array.isArray(p.months_paid) ? p.months_paid.join(', ') : (p.months_paid || '-');
+            const isCancelled = p.status === 'cancelled';
+
+            addLogItem({
+                id: `HIST-PAY-${p.id}`,
+                created_at: isoTs,
+                category: 'payment',
+                action_type: isCancelled ? 'UPDATE' : 'PAYMENT',
+                action_label: isCancelled ? 'ยกเลิกใบเสร็จรับเงิน' : 'รับชำระเงิน / ออกใบเสร็จ',
+                module: isCancelled ? 'รายงานรายรับ' : 'รับชำระเงิน',
+                module_key: isCancelled ? 'waste-reports' : 'waste-payments',
+                target_id: p.receipt_no || p.id,
+                target_name: `${p.customer_name || '-'} (${p.house_no || '-'})`,
+                detail: isCancelled
+                    ? `ยกเลิกใบเสร็จเลขที่ ${p.receipt_no || p.id} ของ "${p.customer_name || '-'}" ยอด ฿${formatMoneyDecimal(p.amount || 0)} สาเหตุ: ${p.reject_reason || '-'}`
+                    : `รับชำระค่าธรรมเนียมขยะ ใบเสร็จเลขที่ ${p.receipt_no || p.id} ลูกค้า "${p.customer_name || '-'}" (${p.house_no || '-'}) ยอด ฿${formatMoneyDecimal(p.amount || 0)} ช่องทาง: ${p.method || '-'} เดือน: ${monthsTxt}${p.note ? ` (หมายเหตุ: ${p.note})` : ''}`,
+                actor_name: p.staff || 'เจ้าหน้าที่รับชำระ',
+                actor_role: 'Officer',
+                actor_username: ''
+            });
+        });
+    } catch (e) {}
+
+    // 5. ดึงประวัติการยกเว้นค่าธรรมเนียม จาก waste_exemptions
+    try {
+        const exemptions = typeof getWasteExemptions === 'function' ? getWasteExemptions() : [];
+        exemptions.forEach(ex => {
+            const datePart = ex.date || new Date().toISOString().split('T')[0];
+            const timePart = (ex.time && /^\d{1,2}:\d{2}/.test(ex.time)) ? ex.time : '11:00';
+            let isoTs = ex.created_at || `${datePart}T${timePart.padStart(5, '0')}:00`;
+            if (isNaN(new Date(isoTs).getTime())) isoTs = new Date().toISOString();
+
+            const monthsTxt = Array.isArray(ex.months_exempted) ? ex.months_exempted.join(', ') : (ex.months_exempted || '-');
+            addLogItem({
+                id: `HIST-EX-${ex.id}`,
+                created_at: isoTs,
+                category: 'payment',
+                action_type: 'EXEMPT',
+                action_label: 'บันทึกยกเว้นค่าธรรมเนียม',
+                module: 'รับชำระเงิน',
+                module_key: 'waste-payments',
+                target_id: ex.id,
+                target_name: `${ex.customer_name || '-'} (${ex.house_no || '-'})`,
+                detail: `ยกเว้นค่าธรรมเนียมขยะให้ "${ex.customer_name || '-'}" (${ex.house_no || '-'}) เดือนที่ยกเว้น: ${monthsTxt} สาเหตุ: ${ex.reject_reason || '-'}`,
+                actor_name: ex.staff || 'เจ้าหน้าที่รับชำระ',
+                actor_role: 'Officer',
+                actor_username: ''
+            });
+        });
+    } catch (e) {}
+
+    // 6. ดึงประวัติคำขอขึ้นทะเบียน (waste_register_requests)
+    try {
+        const regReqs = typeof getRegisterRequests === 'function' ? getRegisterRequests() : [];
+        regReqs.forEach(r => {
+            const isoTs = r.updated_at || r.created_at || new Date().toISOString();
+            const isApproved = r.status === 'approved';
+            const isRejected = r.status === 'rejected';
+            addLogItem({
+                id: `HIST-REG-${r.id}`,
+                created_at: isoTs,
+                category: 'request',
+                action_type: isApproved ? 'APPROVE' : (isRejected ? 'REJECT' : 'CREATE'),
+                action_label: isApproved ? 'อนุมัติคำขอขึ้นทะเบียน' : (isRejected ? 'ปฏิเสธคำขอขึ้นทะเบียน' : 'ยื่นคำขอขึ้นทะเบียนใหม่'),
+                module: 'คำขอขึ้นทะเบียน',
+                module_key: 'waste-register-request',
+                target_id: String(r.id || '-'),
+                target_name: `${r.name || '-'} (บ้านเลขที่ ${r.house_no || '-'} ม.${r.moo || '-'})`,
+                detail: `${isApproved ? 'อนุมัติคำขอขึ้นทะเบียน' : (isRejected ? 'ปฏิเสธคำขอขึ้นทะเบียน' : 'รับคำขอขึ้นทะเบียนใหม่')} ชื่อ "${r.name || '-'}" บ้านเลขที่ ${r.house_no || '-'} ม.${r.moo || '-'} ประเภท: ${r.type || '-'}${r.fee ? ` อัตรา ฿${r.fee}/ด.` : ''}${r.note ? ` (${r.note})` : ''}`,
+                actor_name: isApproved || isRejected ? 'เจ้าหน้าที่ตรวจสอบคำขอ' : (r.name || 'ประชาชน (หน้าบ้าน)'),
+                actor_role: isApproved || isRejected ? 'Officer' : 'Citizen',
+                actor_username: ''
+            });
+        });
+    } catch (e) {}
+
+    // 7. ดึงประวัติคำขอยกเลิกบริการ (waste_cancel_requests)
+    try {
+        const canReqs = typeof getCancelRequests === 'function' ? getCancelRequests() : [];
+        canReqs.forEach(r => {
+            const isoTs = r.updated_at || r.created_at || (r.date ? `${r.date}T10:00:00` : new Date().toISOString());
+            const isApproved = r.status === 'approved';
+            const isRejected = r.status === 'rejected';
+            addLogItem({
+                id: `HIST-CAN-${r.id}`,
+                created_at: isoTs,
+                category: 'request',
+                action_type: isApproved ? 'APPROVE' : (isRejected ? 'REJECT' : 'CREATE'),
+                action_label: isApproved ? 'อนุมัติคำขอยกเลิกบริการ' : (isRejected ? 'ปฏิเสธคำขอยกเลิกบริการ' : 'ยื่นคำขอยกเลิกบริการ'),
+                module: 'คำขอยกเลิกบริการ',
+                module_key: 'waste-cancel-request',
+                target_id: String(r.id || '-'),
+                target_name: `${r.name || '-'} (บ้านเลขที่ ${r.house_no || '-'} ม.${r.moo || '-'})`,
+                detail: `${isApproved ? 'อนุมัติยกเลิกบริการ' : (isRejected ? 'ปฏิเสธคำขอยกเลิกบริการ' : 'รับคำขอยกเลิกบริการ')} ชื่อ "${r.name || '-'}" บ้านเลขที่ ${r.house_no || '-'} ม.${r.moo || '-'} เหตุผล: ${r.reason || '-'}`,
+                actor_name: isApproved || isRejected ? 'เจ้าหน้าที่ตรวจสอบคำขอ' : (r.name || 'ประชาชน (หน้าบ้าน)'),
+                actor_role: isApproved || isRejected ? 'Officer' : 'Citizen',
+                actor_username: ''
+            });
+        });
+    } catch (e) {}
+
+    // 8. ดึงประวัติการนำเข้าไฟล์ KTB-Corporate (ถ้ามีใน localStorage)
+    try {
+        const ktbHist = JSON.parse(localStorage.getItem('waste_ktb_import_history') || '[]');
+        ktbHist.forEach((kh, idx) => {
+            addLogItem({
+                id: `HIST-KTB-${kh.id || idx}`,
+                created_at: kh.imported_at || new Date().toISOString(),
+                category: 'payment',
+                action_type: 'CREATE',
+                action_label: 'นำเข้ารายรับ KTB-Corporate',
+                module: 'รายงานรายรับ',
+                module_key: 'waste-reports',
+                target_id: kh.file_name || 'KTB-Excel',
+                target_name: `ตัดยอด ${kh.count || 0} รายการ`,
+                detail: `นำเข้าไฟล์ธนาคารกรุงไทย "${kh.file_name || '-'}" ตัดยอดอัตโนมัติ ${kh.count || 0} รายการ รวมเป็นเงิน ฿${formatMoneyDecimal(kh.total_amount || 0)}`,
+                actor_name: kh.staff || 'เจ้าหน้าที่กองคลัง',
+                actor_role: 'Officer',
+                actor_username: ''
+            });
+        });
+    } catch (e) {}
+
+    const list = Array.from(logMap.values());
+    list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    return list;
+}
+
+function populateActorDropdown(logs) {
+    const sel = document.getElementById('logActorFilter');
+    if (!sel) return;
+    const curr = sel.value;
+    const actors = new Set();
+    logs.forEach(l => {
+        if (l.actor_name && l.actor_name !== '-') actors.add(l.actor_name.trim());
+    });
+    let opts = '<option value="">ทุกผู้ใช้งาน / เจ้าหน้าที่</option>';
+    Array.from(actors).sort().forEach(a => {
+        opts += `<option value="${a}" ${a === curr ? 'selected' : ''}>${a}</option>`;
+    });
+    sel.innerHTML = opts;
+}
+
+function setLogCategoryFilter(cat, btn) {
+    currentLogCategoryFilter = cat;
+    document.querySelectorAll('.log-tab-pill').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    logCurrentPage = 1;
+    renderLogTable();
+}
+
+function resetLogFilters() {
+    document.getElementById('logSearchInput').value = '';
+    document.getElementById('logModuleFilter').value = '';
+    document.getElementById('logActionFilter').value = '';
+    document.getElementById('logActorFilter').value = '';
+    document.getElementById('logStartDate').value = '';
+    document.getElementById('logEndDate').value = '';
+    logCurrentPage = 1;
+    renderLogTable();
+}
+
+function getFilteredLogs() {
+    const q = (document.getElementById('logSearchInput')?.value || '').toLowerCase().trim();
+    const mod = document.getElementById('logModuleFilter')?.value || '';
+    const act = document.getElementById('logActionFilter')?.value || '';
+    const actor = document.getElementById('logActorFilter')?.value || '';
+    const startDate = document.getElementById('logStartDate')?.value || '';
+    const endDate = document.getElementById('logEndDate')?.value || '';
+
+    return allSystemLogs.filter(item => {
+        if (currentLogCategoryFilter === 'edit_group') {
+            if (!['edit', 'setting'].includes(item.category)) return false;
+        } else if (currentLogCategoryFilter === 'payment') {
+            if (item.category !== 'payment') return false;
+        } else if (currentLogCategoryFilter === 'request') {
+            if (item.category !== 'request') return false;
+        } else if (currentLogCategoryFilter === 'usage_group') {
+            if (!['usage', 'auth'].includes(item.category)) return false;
+        }
+
+        if (mod && item.module !== mod) return false;
+        if (act && item.action_type !== act) return false;
+        if (actor && item.actor_name !== actor) return false;
+
+        if (startDate || endDate) {
+            const dStr = item.created_at ? new Date(item.created_at).toISOString().split('T')[0] : '';
+            if (startDate && dStr < startDate) return false;
+            if (endDate && dStr > endDate) return false;
+        }
+
+        if (q) {
+            const hay = `${item.actor_name || ''} ${item.module || ''} ${item.action_label || ''} ${item.target_id || ''} ${item.target_name || ''} ${item.detail || ''}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+
+        return true;
+    });
+}
+
+function getActionBadgeHTML(item) {
+    const type = String(item.action_type || 'UPDATE').toUpperCase();
+    const label = item.action_label || type;
+    const map = {
+        CREATE: { cls: 'act-create', icon: 'fa-plus-circle' },
+        UPDATE: { cls: 'act-update', icon: 'fa-pen-to-square' },
+        DELETE: { cls: 'act-delete', icon: 'fa-trash-can' },
+        PAYMENT: { cls: 'act-payment', icon: 'fa-file-invoice-dollar' },
+        APPROVE: { cls: 'act-approve', icon: 'fa-circle-check' },
+        REJECT: { cls: 'act-reject', icon: 'fa-circle-xmark' },
+        EXEMPT: { cls: 'act-exempt', icon: 'fa-ban' },
+        LOGIN: { cls: 'act-auth', icon: 'fa-right-to-bracket' },
+        LOGOUT: { cls: 'act-auth', icon: 'fa-right-from-bracket' },
+        VIEW_MENU: { cls: 'act-usage', icon: 'fa-eye' }
+    };
+    const cfg = map[type] || { cls: 'act-setting', icon: 'fa-circle-info' };
+    return `<span class="action-badge ${cfg.cls}"><i class="fa-solid ${cfg.icon}"></i>${label}</span>`;
+}
+
+function formatLogDateTimeThai(isoStr) {
+    if (!isoStr) return { dateStr: '-', timeStr: '-' };
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return { dateStr: String(isoStr), timeStr: '' };
+    const dateStr = d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.';
+    return { dateStr, timeStr };
+}
+
+function goLogPage(p) {
+    logCurrentPage = p;
+    renderLogTable();
+}
+
+function renderLogTable() {
+    const filtered = getFilteredLogs();
+    window.currentFilteredSystemLogs = filtered;
+
+    // Update KPI cards
+    const editCount = filtered.filter(x => ['edit', 'setting', 'request'].includes(x.category)).length;
+    const payCount = filtered.filter(x => x.category === 'payment').length;
+    const usageCount = filtered.filter(x => ['usage', 'auth'].includes(x.category)).length;
+    const uniqueActors = new Set(filtered.map(x => x.actor_name).filter(Boolean)).size;
+
+    document.getElementById('kpiTotalLogs').textContent = formatMoney(filtered.length);
+    document.getElementById('kpiEditLogs').textContent = formatMoney(editCount);
+    document.getElementById('kpiPaymentLogs').textContent = formatMoney(payCount);
+    document.getElementById('kpiUsageLogs').textContent = formatMoney(usageCount);
+    document.getElementById('kpiActiveUsersSub').textContent = `ผู้ทำรายการทั้งหมด ${formatMoney(uniqueActors)} คน`;
+
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / logPageSize) || 1;
+    if (logCurrentPage > totalPages) logCurrentPage = totalPages;
+    const startIdx = (logCurrentPage - 1) * logPageSize;
+    const pageData = filtered.slice(startIdx, startIdx + logPageSize);
+
+    const tbody = document.getElementById('logTableBody');
+    if (pageData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="fa-solid fa-clock-rotate-left fa-2x mb-2 opacity-25 d-block"></i>ไม่พบรายการ LOG ตามเงื่อนไขตัวกรอง</td></tr>';
+    } else {
+        tbody.innerHTML = pageData.map((item, idx) => {
+            const dt = formatLogDateTimeThai(item.created_at);
+            const seq = startIdx + idx + 1;
+            const roleBadge = item.actor_role
+                ? `<span class="badge bg-light text-secondary border ms-1" style="font-size:0.65rem;">${item.actor_role}</span>`
+                : '';
+
+            return `<tr>
+                <td class="ps-4 text-muted text-xs fw-semibold">${seq}</td>
+                <td>
+                    <div class="fw-semibold text-dark text-xs">${dt.dateStr}</div>
+                    <div class="text-muted" style="font-size:0.75rem;"><i class="fa-regular fa-clock me-1"></i>${dt.timeStr}</div>
+                </td>
+                <td>
+                    <div class="fw-bold text-dark text-sm">${item.actor_name || '-'}</div>
+                    <div>${roleBadge}</div>
+                </td>
+                <td>
+                    <span class="badge bg-light text-dark border fw-semibold">${item.module || '-'}</span>
+                </td>
+                <td>${getActionBadgeHTML(item)}</td>
+                <td>
+                    <div class="fw-semibold text-dark text-xs">${item.target_name || '-'}</div>
+                    <div class="text-muted" style="font-size:0.72rem;">รหัสอ้างอิง: ${item.target_id || '-'}</div>
+                </td>
+                <td class="text-xs text-dark" style="max-width: 380px; line-height: 1.45;">
+                    ${item.detail || '-'}
+                </td>
+                <td class="pe-4 text-center">
+                    <button class="btn btn-xs btn-outline-primary rounded-pill px-2" onclick="viewLogDetailModal('${item.id}')" title="ดูรายละเอียด LOG">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    const pInfo = document.getElementById('logPageInfo');
+    const pUl = document.getElementById('logPagination');
+    if (pInfo && pUl) {
+        if (totalItems > 0) {
+            pInfo.innerHTML = `แสดง ${startIdx + 1} ถึง ${Math.min(startIdx + logPageSize, totalItems)} จากทั้งหมด <b>${formatMoney(totalItems)}</b> รายการ`;
+            let pHtml = `<li class="page-item ${logCurrentPage === 1 ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="goLogPage(${logCurrentPage - 1})">ก่อนหน้า</a></li>`;
+            let sp = Math.max(1, logCurrentPage - 2);
+            let ep = Math.min(totalPages, sp + 4);
+            if (ep - sp < 4) sp = Math.max(1, ep - 4);
+            for (let i = sp; i <= ep; i++) {
+                pHtml += `<li class="page-item ${i === logCurrentPage ? 'active' : ''}"><a class="page-link" href="javascript:void(0)" onclick="goLogPage(${i})">${i}</a></li>`;
+            }
+            pHtml += `<li class="page-item ${logCurrentPage === totalPages ? 'disabled' : ''}"><a class="page-link" href="javascript:void(0)" onclick="goLogPage(${logCurrentPage + 1})">ถัดไป</a></li>`;
+            pUl.innerHTML = pHtml;
+        } else {
+            pInfo.innerHTML = 'แสดง 0 รายการ';
+            pUl.innerHTML = '';
+        }
+    }
+}
+
+function viewLogDetailModal(logId) {
+    const item = allSystemLogs.find(x => String(x.id) === String(logId));
+    if (!item) return;
+    const dt = formatLogDateTimeThai(item.created_at);
+
+    Swal.fire({
+        title: '<span class="fs-5 fw-bold"><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i>รายละเอียดข้อมูล LOG</span>',
+        html: `
+            <div class="text-start" style="font-size: 0.9rem;">
+                <div class="p-3 rounded-3 bg-light border mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted text-xs">รหัส LOG: <code>${item.id}</code></span>
+                        ${getActionBadgeHTML(item)}
+                    </div>
+                    <div class="fw-bold text-dark fs-6">${item.action_label || '-'}</div>
+                    <div class="text-xs text-muted mt-1"><i class="fa-regular fa-calendar me-1"></i>${dt.dateStr} เวลา ${dt.timeStr}</div>
+                </div>
+                <table class="table table-sm table-bordered mb-0">
+                    <tr><th class="bg-light" style="width: 35%;">ผู้ดำเนินการ</th><td class="fw-semibold">${item.actor_name || '-'} (${item.actor_role || '-'})</td></tr>
+                    <tr><th class="bg-light">เมนู / โมดูล</th><td>${item.module || '-'}</td></tr>
+                    <tr><th class="bg-light">รหัสอ้างอิง</th><td><code>${item.target_id || '-'}</code></td></tr>
+                    <tr><th class="bg-light">เป้าหมาย / รายการ</th><td class="fw-semibold">${item.target_name || '-'}</td></tr>
+                    <tr><th class="bg-light">รายละเอียด</th><td style="line-height: 1.5;">${item.detail || '-'}</td></tr>
+                </table>
+            </div>
+        `,
+        confirmButtonText: 'ปิดหน้าต่าง',
+        confirmButtonColor: '#1a56db',
+        width: 560
+    });
+}
+
+function exportLogsExcel() {
+    const logs = window.currentFilteredSystemLogs || getFilteredLogs();
+    if (!logs || logs.length === 0) {
+        Swal.fire('ไม่มีข้อมูล', 'ไม่พบรายการ LOG ตามตัวกรองที่เลือก', 'warning');
+        return;
+    }
+
+    const settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
+    const orgName = settings.org_name || 'เทศบาลเมืองบ้านเป็ด';
+    const now = new Date();
+    const printDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const aoa = [
+        [`รายงานประวัติการแก้ไขข้อมูลและประวัติการใช้งานระบบ (Audit & Usage Log) — ${orgName}`],
+        [`ข้อมูล ณ วันที่ ${printDate} | จำนวนรายการทั้งหมด ${formatMoney(logs.length)} รายการ`],
+        [],
+        ['ลำดับ', 'วันที่', 'เวลา', 'ผู้ทำรายการ', 'บทบาท/สิทธิ์', 'เมนู/ระบบงาน', 'ประเภทกิจกรรม', 'รหัสอ้างอิง', 'เป้าหมาย/ผู้เกี่ยวข้อง', 'รายละเอียดการดำเนินการ']
+    ];
+
+    logs.forEach((l, idx) => {
+        const dt = formatLogDateTimeThai(l.created_at);
+        aoa.push([
+            idx + 1,
+            dt.dateStr,
+            dt.timeStr,
+            l.actor_name || '-',
+            l.actor_role || '-',
+            l.module || '-',
+            l.action_label || l.action_type || '-',
+            l.target_id || '-',
+            l.target_name || '-',
+            l.detail || '-'
+        ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } }
+    ];
+    ws['!cols'] = [
+        { wch: 8 },
+        { wch: 15 },
+        { wch: 13 },
+        { wch: 24 },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 24 },
+        { wch: 18 },
+        { wch: 30 },
+        { wch: 60 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'LOG_ประวัติการใช้งาน');
+    XLSX.writeFile(wb, `LOG_ประวัติการใช้งานระบบ_${now.toISOString().split('T')[0]}.xlsx`);
+    showToast('ส่งออกไฟล์ Excel สำเร็จ', 'success');
+}
+
+function exportLogsPDF() {
+    const logs = window.currentFilteredSystemLogs || getFilteredLogs();
+    if (!logs || logs.length === 0) {
+        Swal.fire('ไม่มีข้อมูล', 'ไม่พบรายการ LOG ตามตัวกรองที่เลือก', 'warning');
+        return;
+    }
+
+    const settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
+    const orgName = settings.org_name || 'เทศบาลเมืองบ้านเป็ด';
+    const baseHref = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+    const defaultGaruda = baseHref + 'assets/img/garuda.png';
+    const logoUrl = settings.org_logo || defaultGaruda;
+    const now = new Date();
+    const printDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+    const printTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+
+    const rowsHtml = logs.map((l, idx) => {
+        const dt = formatLogDateTimeThai(l.created_at);
+        return `<tr>
+            <td style="text-align:center;">${idx + 1}</td>
+            <td style="text-align:center;">${dt.dateStr}<br><span style="font-size:8pt;color:#64748b;">${dt.timeStr}</span></td>
+            <td><strong>${l.actor_name || '-'}</strong><br><span style="font-size:8pt;color:#64748b;">${l.actor_role || '-'}</span></td>
+            <td style="text-align:center;">${l.module || '-'}</td>
+            <td style="text-align:center;font-weight:700;">${l.action_label || l.action_type || '-'}</td>
+            <td><strong>${l.target_name || '-'}</strong><br><span style="font-size:8pt;color:#64748b;">รหัส: ${l.target_id || '-'}</span></td>
+            <td>${l.detail || '-'}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>รายงาน LOG ประวัติการแก้ไขและประวัติการใช้งานระบบ - ${orgName}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Sarabun', sans-serif; color: #111827; padding: 15px 20px; font-size: 9.5pt; line-height: 1.35; }
+        .toolbar { background: #0f172a; color: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-radius: 8px; }
+        .toolbar button { border: none; padding: 7px 16px; border-radius: 6px; font-family: 'Sarabun', sans-serif; font-weight: 700; cursor: pointer; margin-left: 8px; }
+        .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1e293b; padding-bottom: 10px; margin-bottom: 12px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand img { width: 52px; height: 52px; object-fit: contain; }
+        .brand h1 { font-size: 13.5pt; font-weight: 700; color: #0f172a; }
+        .brand h2 { font-size: 11pt; color: #1e3a8a; }
+        table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+        th, td { border: 1px solid #334155; padding: 5px 6px; vertical-align: middle; }
+        thead th { background: #1e293b !important; color: #fff !important; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        tbody tr:nth-child(even) { background: #f8fafc; }
+        @media print {
+            @page { size: A4 landscape; margin: 8mm 10mm; }
+            .toolbar { display: none !important; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div><strong>📄 รายงาน LOG ประวัติการแก้ไขและประวัติการใช้งานระบบ (${formatMoney(logs.length)} รายการ)</strong></div>
+        <div>
+            <button style="background:#16a34a;color:#fff;" onclick="window.print()">🖨️ สั่งพิมพ์ / บันทึก PDF</button>
+            <button style="background:#dc2626;color:#fff;" onclick="window.close()">✖ ปิดหน้าต่าง</button>
+        </div>
+    </div>
+    <div class="header">
+        <div class="brand">
+            <img src="${logoUrl}" alt="Logo" onerror="this.src='${defaultGaruda}'">
+            <div>
+                <h1>รายงานประวัติการแก้ไขข้อมูลและประวัติการใช้งานระบบ (System Audit &amp; Usage Log)</h1>
+                <h2>${orgName} • กองคลัง (ระบบบริหารจัดการค่าธรรมเนียมขยะมูลฝอย)</h2>
+            </div>
+        </div>
+        <div style="text-align:right;font-size:9pt;">
+            <div><strong>วันที่พิมพ์:</strong> ${printDate} เวลา ${printTime}</div>
+            <div><strong>จำนวนรายการตามตัวกรอง:</strong> ${formatMoney(logs.length)} รายการ</div>
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:5%;">ลำดับ</th>
+                <th style="width:11%;">วัน-เวลา</th>
+                <th style="width:14%;">ผู้ทำรายการ</th>
+                <th style="width:11%;">เมนู/โมดูล</th>
+                <th style="width:14%;">ประเภทกิจกรรม</th>
+                <th style="width:16%;">ข้อมูลอ้างอิง/เป้าหมาย</th>
+                <th style="width:29%;">รายละเอียดการดำเนินการ</th>
+            </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+    </table>
+    <script>
+        window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 500); });
+    <\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=1150,height=820');
+    if (!win) {
+        Swal.fire('แจ้งเตือน', 'กรุณาอนุญาตป๊อปอัป (Pop-up) เพื่อพิมพ์รายงาน PDF', 'warning');
+        return;
+    }
+    win.document.write(html);
+    win.document.close();
+}
+</script>
+</body>
+</html>

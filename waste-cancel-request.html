@@ -41,8 +41,8 @@
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
                         <thead><tr>
-                            <th class="ps-4">เลขคำขอ</th><th>ชื่อ</th><th>บ้านเลขที่</th><th>เหตุผล</th>
-                            <th>วันที่ยื่น</th><th>สถานะ</th><th class="pe-4 text-center">จัดการ</th>
+                            <th class="ps-4">เลขคำขอ</th><th>ชื่อ</th><th>บ้านเลขที่</th><th>เบอร์ติดต่อกลับ</th><th>เหตุผล</th>
+                            <th>รูปภาพ</th><th>วันที่ยื่น</th><th>สถานะ</th><th class="pe-4 text-center">จัดการ</th>
                         </tr></thead>
                         <tbody id="canTableBody"></tbody>
                     </table>
@@ -73,6 +73,90 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 });
 
+function extractCancelMeta(r) {
+    let customerId = r.customer_id || '';
+    let phone = r.phone || '';
+    let imageUrl = r.image_url || '';
+    if (r.note) {
+        const mCid = String(r.note).match(/\[รหัสลูกค้า:([^\]]+)\]/);
+        if (!customerId && mCid) customerId = mCid[1].trim();
+        const mPhone = String(r.note).match(/\[โทร:([^\]]+)\]/);
+        if (!phone && mPhone) phone = mPhone[1];
+        const mImg = String(r.note).match(/\[รูปภาพ:([^\]]+)\]/);
+        if (!imageUrl && mImg) imageUrl = mImg[1];
+    }
+    return { customerId: customerId || '', phone: phone || '-', imageUrl: imageUrl || '' };
+}
+
+function findMatchedCancelCustomer(r) {
+    const customers = typeof getWasteCustomers === 'function' ? getWasteCustomers() : [];
+    const meta = extractCancelMeta(r);
+    let target = null;
+    if (meta.customerId) {
+        target = customers.find(x => String(x.id).trim() === String(meta.customerId).trim());
+    }
+    if (!target && r.house_no) {
+        const hClean = String(r.house_no).trim();
+        const mClean = String(r.moo || '').trim();
+        target = customers.find(x =>
+            String(x.house_no || '').trim() === hClean &&
+            (!mClean || String(x.moo || '').trim() === mClean)
+        );
+    }
+    return target;
+}
+
+function extractCancelDriveFileId(url) {
+    if (!url || typeof url !== 'string') return '';
+    const m1 = url.match(/\/d\/([a-zA-Z0-9_-]{15,})/);
+    if (m1) return m1[1];
+    const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+    if (m2) return m2[1];
+    const m3 = url.match(/[-\w]{25,}/);
+    if (m3 && (url.includes('drive.google.com') || url.includes('googleusercontent.com'))) return m3[0];
+    return '';
+}
+
+function handleCancelDriveImgError(imgEl, fileId) {
+    if (!imgEl) return;
+    const step = parseInt(imgEl.getAttribute('data-fallback-step') || '0', 10);
+    if (fileId && step === 0) {
+        imgEl.setAttribute('data-fallback-step', '1');
+        imgEl.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+        return;
+    }
+    const wrapper = imgEl.parentElement;
+    if (wrapper) {
+        if (fileId) {
+            wrapper.innerHTML = `<iframe src="https://drive.google.com/file/d/${fileId}/preview" style="width:100%; height:280px; border:1px solid #dee2e6; border-radius:10px;" allow="autoplay"></iframe>`;
+        } else {
+            wrapper.innerHTML = `<div class="p-4 rounded-3 border bg-light text-muted text-sm">ไม่สามารถแสดงตัวอย่างรูปภาพได้ กรุณากดปุ่มเปิดดูใน Google Drive ด้านล่าง</div>`;
+        }
+    }
+}
+
+function viewCancelImage(url, name, houseNo) {
+    if (!url) return;
+    const fileId = extractCancelDriveFileId(url);
+    const imgSrc = fileId ? `https://lh3.googleusercontent.com/d/${fileId}=w800` : url;
+    Swal.fire({
+        title: `รูปภาพประกอบคำขอยกเลิก`,
+        html: `
+            <div class="text-sm text-muted mb-2">${name || '-'} (บ้านเลขที่ ${houseNo || '-'})</div>
+            <div class="mb-3">
+                <img src="${imgSrc}" referrerpolicy="no-referrer" class="img-fluid rounded shadow-sm border" style="max-height: 360px;" onerror="handleCancelDriveImgError(this, '${fileId}')">
+            </div>
+            <div>
+                <a href="${url}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>เปิดดูรูปภาพใน Google Drive
+                </a>
+            </div>
+        `,
+        confirmButtonText: 'ปิดหน้าต่าง',
+        confirmButtonColor: '#6b7280'
+    });
+}
+
 function renderCancelRequests() {
     const reqs = getCancelRequests();
     document.getElementById('canPending').textContent = reqs.filter(r=>r.status==='pending').length;
@@ -85,43 +169,76 @@ function renderCancelRequests() {
     };
 
     const tbody = document.getElementById('canTableBody');
-    tbody.innerHTML = reqs.map(r => `<tr>
+    tbody.innerHTML = reqs.map(r => {
+        const meta = extractCancelMeta(r);
+        const matchedCustomer = findMatchedCancelCustomer(r);
+        const safeUrl = meta.imageUrl.replace(/'/g, "\\'");
+        const safeName = String(r.name || '').replace(/'/g, "\\'");
+        const safeHouse = String(r.house_no || '').replace(/'/g, "\\'");
+
+        const matchBadgeHtml = matchedCustomer
+            ? `<div class="mt-1"><span class="badge bg-primary-subtle text-primary border" style="font-size:0.7rem;"><i class="fa-solid fa-link me-1"></i>จับคู่รหัส: ${matchedCustomer.id} (${matchedCustomer.name})</span></div>`
+            : `<div class="mt-1"><span class="badge bg-warning-subtle text-warning border" style="font-size:0.7rem;"><i class="fa-solid fa-triangle-exclamation me-1"></i>ไม่พบรหัสที่ตรงกันในระบบ</span></div>`;
+
+        return `<tr>
         <td class="ps-4 fw-semibold text-xs">${r.id}</td>
-        <td>${r.name}</td><td>${r.house_no}</td>
+        <td>${r.name || '-'}</td>
+        <td>
+            <div class="fw-semibold">${r.house_no || '-'}${r.moo ? ` ม.${r.moo}` : ''}</div>
+            ${matchBadgeHtml}
+        </td>
+        <td class="text-xs">${meta.phone}</td>
         <td>${reasonBadge(r.reason)}</td>
-        <td class="text-xs text-muted">${r.date}</td>
+        <td>
+            ${meta.imageUrl
+                ? `<button class="btn btn-xs btn-outline-info" onclick="viewCancelImage('${safeUrl}', '${safeName}', '${safeHouse}')" title="ดูรูปภาพ"><i class="fa-solid fa-image me-1"></i>ดูรูป</button>`
+                : '<span class="text-xs text-muted">-</span>'}
+        </td>
+        <td class="text-xs text-muted">${r.date || '-'}</td>
         <td><span class="badge ${r.status==='pending'?'bg-warning text-dark':r.status==='approved'?'bg-success':'bg-danger'}">${r.status==='pending'?'รอตรวจสอบ':r.status==='approved'?'อนุมัติแล้ว':'ปฏิเสธ'}</span></td>
-        <td class="pe-4 text-center">${r.status==='pending'?`
-            <button class="btn btn-xs btn-success me-1" onclick="approveCan('${r.id}')"><i class="fa-solid fa-check me-1"></i>อนุมัติ</button>
-            <button class="btn btn-xs btn-outline-danger" onclick="rejectCan('${r.id}')"><i class="fa-solid fa-xmark"></i></button>
-        `:'<span class="text-xs text-muted">ดำเนินการแล้ว</span>'}</td>
-    </tr>`).join('');
+        <td class="pe-4 text-center">
+            ${r.status==='pending'?`
+                <button class="btn btn-xs btn-success me-1" onclick="approveCan('${r.id}')"><i class="fa-solid fa-check me-1"></i>อนุมัติ</button>
+                <button class="btn btn-xs btn-outline-danger me-1" onclick="rejectCan('${r.id}')" title="ปฏิเสธคำขอ"><i class="fa-solid fa-xmark"></i></button>
+            `:'<span class="text-xs text-muted me-2">ดำเนินการแล้ว</span>'}
+            <button class="btn btn-xs btn-outline-danger" onclick="deleteCanRequest('${r.id}')" title="ลบคำขอ"><i class="fa-solid fa-trash-can"></i></button>
+        </td>
+    </tr>`;
+    }).join('');
 }
 
 function approveCan(id) {
-    Swal.fire({title:'อนุมัติยกเลิก?',text:'ระบบจะเปลี่ยนสถานะลูกค้าเป็น "ยกเลิก"',icon:'warning',showCancelButton:true,confirmButtonText:'อนุมัติ',confirmButtonColor:'#c81e1e'}).then(async result => {
+    const reqs = typeof getCancelRequests === 'function' ? getCancelRequests() : [];
+    const r = reqs.find(x => x.id === id);
+    if (!r) return;
+    const targetCustomer = findMatchedCancelCustomer(r);
+
+    const confirmHtml = targetCustomer
+        ? `ระบบจะเปลี่ยนสถานะลูกค้า <b>${targetCustomer.name}</b><br>(รหัส: <b>${targetCustomer.id}</b> • บ้านเลขที่ ${targetCustomer.house_no} ม.${targetCustomer.moo}) เป็น <span class="text-danger fw-bold">"ยกเลิก"</span>`
+        : `ไม่พบรหัสลูกค้าที่เชื่อมโยงโดยตรงสำหรับบ้านเลขที่ ${r.house_no} ม.${r.moo}<br>ยืนยันการอนุมัติคำขอยกเลิกหรือไม่?`;
+
+    Swal.fire({
+        title: 'อนุมัติยกเลิก?',
+        html: confirmHtml,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'อนุมัติยกเลิก',
+        cancelButtonText: 'ปิด',
+        confirmButtonColor: '#c81e1e'
+    }).then(async result => {
         if (result.isConfirmed) {
-            const reqs = typeof getCancelRequests === 'function' ? getCancelRequests() : [];
-            const r = reqs.find(x => x.id === id);
-            if (!r) return;
+            Swal.fire({title: 'กำลังดำเนินการ...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
             r.status = 'approved';
             if (typeof saveCancelRequestDB === 'function') await saveCancelRequestDB(r);
             else saveCancelRequests(reqs);
             
-            // Update customer status
-            const customers = typeof getWasteCustomers === 'function' ? getWasteCustomers() : [];
-            let targetCustomer = null;
-            if (r.customer_id) {
-                targetCustomer = customers.find(x => x.id === r.customer_id);
-            } else {
-                targetCustomer = customers.find(x => x.house_no === r.house_no && x.moo === r.moo);
-            }
             if (targetCustomer) { 
                 targetCustomer.status = 'cancelled'; 
                 if (typeof saveWasteCustomerDB === 'function') await saveWasteCustomerDB(targetCustomer);
-                else saveWasteCustomers(customers); 
+                else saveWasteCustomers( getWasteCustomers() ); 
             }
-            showToast('อนุมัติยกเลิกสำเร็จ','success');
+            Swal.close();
+            showToast('อนุมัติยกเลิกสำเร็จ', 'success');
             renderCancelRequests();
         }
     });
@@ -142,6 +259,35 @@ function rejectCan(id) {
             renderCancelRequests();
         }
     });
+}
+
+async function deleteCanRequest(id) {
+    const reqs = typeof getCancelRequests === 'function' ? getCancelRequests() : [];
+    const r = reqs.find(x => String(x.id) === String(id));
+    const label = r ? `${r.name || '-'} (บ้านเลขที่ ${r.house_no || '-'} ม.${r.moo || '-'})` : id;
+
+    const result = await Swal.fire({
+        title: 'ยืนยันการลบคำขอ?',
+        html: `ต้องการลบคำขอยกเลิกบริการของ<br><b>${label}</b> หรือไม่?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: '<i class="fa-solid fa-trash-can me-1"></i>ลบคำขอ',
+        cancelButtonText: 'ยกเลิก'
+    });
+    if (!result.isConfirmed) return;
+
+    Swal.fire({title: 'กำลังลบคำขอ...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+    try {
+        await deleteCancelRequestDB(id);
+        Swal.close();
+        showToast('ลบคำขอยกเลิกบริการเรียบร้อยแล้ว', 'success');
+        renderCancelRequests();
+    } catch (err) {
+        console.error(err);
+        Swal.fire('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถลบคำขอได้', 'error');
+    }
 }
 </script>
 </body>

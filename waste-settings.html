@@ -174,7 +174,7 @@
                             <div class="mb-3 p-3 rounded-3 border bg-light bg-opacity-50">
                                 <label class="form-label fw-semibold mb-1">
                                     <i class="fa-solid fa-qrcode text-primary me-1"></i>QRCODE ระบบบริการประชาชน / ชำระค่าธรรมเนียมขยะ
-                                    <br><small class="text-muted fw-normal">(ใส่ลิงก์ระบบหน้าบ้านสำหรับประชาชนแล้วกด Generate เพื่อสร้าง QR Code หรือเลือกอัปโหลดไฟล์ภาพ)</small>
+                                    <br><small class="text-muted fw-normal">(ใส่ลิงก์ระบบหน้าบ้านสำหรับประชาชนแล้วกด Generate เพื่อสร้าง QR Code หรือเลือกอัปโหลดไฟล์ภาพลง Google Drive)</small>
                                 </label>
                                 <div class="input-group mb-2 mt-2">
                                     <span class="input-group-text bg-white text-muted"><i class="fa-solid fa-link"></i></span>
@@ -186,17 +186,28 @@
                                         <i class="fa-solid fa-qrcode me-1"></i>Generate QR Code
                                     </button>
                                 </div>
-                                <div class="d-flex align-items-center gap-2 mt-2">
+                                <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
                                     <span class="text-muted small text-nowrap">หรืออัปโหลดรูปภาพ:</span>
-                                    <input class="form-control form-control-sm" type="file" id="qrCodeFile" accept="image/png, image/jpeg" onchange="previewImage(this, 'qrCodePreview')">
+                                    <input class="form-control form-control-sm" style="max-width: 280px;" type="file" id="qrCodeFile" accept="image/png, image/jpeg" onchange="previewImage(this, 'qrCodePreview')">
+                                    <button type="button" class="btn btn-sm btn-success fw-semibold px-3" id="btnUploadCitizenQrNow" onclick="uploadAndSaveCitizenQR()">
+                                        <i class="fa-brands fa-google-drive me-1"></i>อัปโหลดลง Drive & บันทึก
+                                    </button>
                                 </div>
-                                <div class="text-muted small mt-1">ไฟล์ภาพ QR Code ระบบบริการประชาชน ไม่เกิน 2MB</div>
-                                <div class="d-flex align-items-end gap-3 flex-wrap">
-                                    <img id="qrCodePreview" class="img-preview" alt="QR Code Preview" style="max-width: 190px;">
+                                <div class="text-muted small mt-1">ไฟล์ภาพ QR Code ระบบบริการประชาชน ไม่เกิน 2MB (เก็บที่ Google Drive และบันทึกในตาราง waste_settings)</div>
+                                <div class="d-flex align-items-end gap-3 flex-wrap mt-2">
+                                    <div id="qrCodePreviewWrapper">
+                                        <img id="qrCodePreview" class="img-preview" referrerpolicy="no-referrer" alt="QR Code Preview" style="max-width: 190px; margin-top: 4px;" onerror="handleSettingsDriveImgError(this)">
+                                    </div>
                                     <div id="qrCodeActions" style="display: none;" class="mb-1">
-                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="downloadCitizenPortalQR()">
-                                            <i class="fa-solid fa-download me-1"></i>ดาวน์โหลดภาพ QR Code
-                                        </button>
+                                        <div id="qrCodeDriveStatus" class="text-xs text-success fw-semibold mb-2"></div>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <a id="qrCodeDriveLinkBtn" href="#" target="_blank" class="btn btn-sm btn-outline-success" style="display: none;">
+                                                <i class="fa-brands fa-google-drive me-1"></i>เปิดดูใน Google Drive
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="downloadCitizenPortalQR()">
+                                                <i class="fa-solid fa-download me-1"></i>ดาวน์โหลดภาพ QR Code
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -204,7 +215,7 @@
                                 <label class="form-label fw-semibold">QRCODE พร้อมเพย์</label>
                                 <input class="form-control" type="file" id="qrCodePromptPayFile" accept="image/png, image/jpeg" onchange="previewImage(this, 'qrCodePromptPayPreview')">
                                 <div class="text-muted small mt-1">ไฟล์ภาพ QR Code รับชำระเงิน (PromptPay) ไม่เกิน 2MB</div>
-                                <img id="qrCodePromptPayPreview" class="img-preview" alt="PromptPay Preview">
+                                <img id="qrCodePromptPayPreview" class="img-preview" referrerpolicy="no-referrer" alt="PromptPay Preview" onerror="handleSettingsDriveImgError(this)">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">เลขบัญชีธนาคาร</label>
@@ -313,7 +324,7 @@
 <script src="assets/js/app.js?v=20261113"></script>
 <script src="assets/js/waste.js"></script>
 <script src="assets/js/thai-address.js"></script>
-<script src="assets/js/waste-settings.js?v=20261113_2"></script>
+<script src="assets/js/waste-settings.js?v=20261125"></script>
 <script src="assets/js/waste-backup.js"></script>
 </body>
 </html>

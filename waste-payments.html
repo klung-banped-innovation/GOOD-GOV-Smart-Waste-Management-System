@@ -261,10 +261,45 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 });
 
+function getLoggedInCollectorInfo() {
+    const user = typeof getSessionUser === 'function' ? getSessionUser() : null;
+    const staffList = typeof getWasteStaff === 'function' ? getWasteStaff() : [];
+
+    if (user) {
+        // ค้นหาจากตาราง waste_staff ที่ตรงกับ username, id หรือชื่อของ user ที่ login
+        const matched = staffList.find(s =>
+            (s.username && user.username && String(s.username).trim() === String(user.username).trim()) ||
+            (s.id && user.id && String(s.id) === String(user.id)) ||
+            (s.name && user.name && (s.name === user.name || s.name.includes(user.name) || user.name.includes(s.name)))
+        );
+        if (matched) {
+            const pos = matched.position || matched.role || user.role || 'เจ้าหน้าที่รับชำระ';
+            return {
+                name: matched.name,
+                displayLabel: `${matched.name} (${pos})`
+            };
+        }
+        const fallbackName = user.name || user.username || 'เจ้าหน้าที่รับชำระ';
+        const fallbackRole = user.role || user.dept || 'เจ้าหน้าที่รับชำระ';
+        return {
+            name: fallbackName,
+            displayLabel: `${fallbackName} (${fallbackRole})`
+        };
+    }
+
+    const firstActive = staffList.find(s => s.status === 'active');
+    if (firstActive) {
+        return {
+            name: firstActive.name,
+            displayLabel: `${firstActive.name} (${firstActive.position || firstActive.role || 'เจ้าหน้าที่'})`
+        };
+    }
+    return { name: 'เจ้าหน้าที่รับชำระ', displayLabel: 'เจ้าหน้าที่รับชำระ' };
+}
+
 function getStaffOptions() {
-    const staff = getWasteStaff().filter(s => s.status === 'active');
-    if (staff.length === 0) return '<option value="">-- ยังไม่มีเจ้าหน้าที่ --</option>';
-    return '<option value="">-- เลือกเจ้าหน้าที่ --</option>' + staff.map(s => `<option value="${s.name}">${s.name} (${s.position || s.role})</option>`).join('');
+    const info = getLoggedInCollectorInfo();
+    return `<option value="${info.name}" selected>${info.displayLabel}</option>`;
 }
 
 let onlineTransactions = [];
@@ -692,14 +727,6 @@ function selectCustomer(id, year = null) {
                     <span class="text-sm text-muted">${selectedCustomer.house_no} ม.${selectedCustomer.moo} • ${selectedCustomer.type} • ฿${formatMoney(selectedCustomer.fee)}/เดือน</span>
                 </div>
             </div>
-            <div class="d-flex flex-column gap-2">
-                <button class="btn btn-sm btn-outline-success fw-bold" onclick="showLineNotifyModal('${selectedCustomer.id}', 'PAYMENT_SUCCESS')">
-                    <i class="fa-brands fa-line me-1"></i> แจ้งชำระเงิน
-                </button>
-                <button class="btn btn-sm btn-outline-danger fw-bold" onclick="showLineNotifyModal('${selectedCustomer.id}', 'OVERDUE')">
-                    <i class="fa-brands fa-line me-1"></i> แจ้งค้างชำระ
-                </button>
-            </div>
         </div>
         
         <div class="btn-group w-100 mb-4" role="group">
@@ -770,15 +797,23 @@ function selectCustomer(id, year = null) {
                 <input type="date" class="form-control" id="payDate" value="${new Date().toISOString().split('T')[0]}"></div>
             <div class="col-md-4"><label class="form-label fw-semibold text-sm">วิธีชำระ</label>
                 <select class="form-select" id="payMethod"><option>เงินสด</option><option>โอน</option><option>QR PromptPay</option></select></div>
-            <div class="col-md-4"><label class="form-label fw-semibold text-sm">เจ้าหน้าที่รับชำระ</label>
-                <select class="form-select" id="payStaff">${getStaffOptions()}</select></div>
+            <div class="col-md-4"><label class="form-label fw-semibold text-sm">เจ้าหน้าที่รับชำระ <i class="fa-solid fa-lock text-muted ms-1" title="ล็อกตามผู้ใช้งานที่เข้าสู่ระบบ"></i></label>
+                <select class="form-select bg-light fw-semibold text-dark" id="payStaff" disabled style="cursor: not-allowed;">${getStaffOptions()}</select></div>
             <div class="col-12"><label class="form-label fw-semibold text-sm">ยอดรวม</label>
                 <div class="input-group"><span class="input-group-text">฿</span><input type="text" class="form-control fw-bold fs-4 text-success" id="totalAmount" value="0" readonly></div></div>
         </div>
-        <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
-            <button class="btn btn-light px-4" onclick="clearPayment()">ล้าง</button>
-            <button class="btn btn-warning px-4 fw-semibold text-white" onclick="exemptPayment()"><i class="fa-solid fa-ban me-1"></i>ยกเว้นชำระ</button>
-            <button class="btn btn-success px-4 fw-semibold" onclick="submitWalkIn()"><i class="fa-solid fa-check me-1"></i>รับชำระ</button>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-4 pt-3 border-top">
+            <div class="flex-grow-1" style="min-width: 240px;">
+                <div class="input-group">
+                    <span class="input-group-text bg-light fw-semibold text-sm"><i class="fa-regular fa-comment-dots text-primary me-1"></i>หมายเหตุการชำระ</span>
+                    <input type="text" class="form-control" id="payNote" placeholder="ระบุหมายเหตุการชำระ (ถ้ามี) แสดงในใบเสร็จใต้ชื่อผู้ชำระ...">
+                </div>
+            </div>
+            <div class="d-flex gap-2 ms-auto">
+                <button class="btn btn-light px-4" onclick="clearPayment()">ล้าง</button>
+                <button class="btn btn-warning px-4 fw-semibold text-white" onclick="exemptPayment()"><i class="fa-solid fa-ban me-1"></i>ยกเว้นชำระ</button>
+                <button class="btn btn-success px-4 fw-semibold" onclick="submitWalkIn()"><i class="fa-solid fa-check me-1"></i>รับชำระ</button>
+            </div>
         </div>`;
         
     calcTotal();
@@ -818,6 +853,8 @@ async function submitWalkIn() {
     
     const method = document.getElementById('payMethod').value;
     const staffName = document.getElementById('payStaff').value;
+    const payDateVal = document.getElementById('payDate')?.value || null;
+    const payNote = (document.getElementById('payNote')?.value || '').trim();
     if (!staffName) { Swal.fire('กรุณาเลือกเจ้าหน้าที่','เลือกเจ้าหน้าที่รับชำระก่อนดำเนินการ','warning'); return; }
     
     // โชว์ Loading ระหว่างดึงเลขล่าสุด
@@ -834,6 +871,7 @@ async function submitWalkIn() {
         html:`
             <div style="text-align: left; margin-bottom: 15px; background: #f8f9fa; padding: 10px; border-radius: 8px;">
                 <b>ชื่อลูกค้า:</b> ${selectedCustomer.name}<br>
+                ${payNote ? `<b>หมายเหตุ:</b> ${payNote}<br>` : ''}
                 <b>เดือนที่ชำระ:</b><br>${formatMonthsGroupedByYear(checkedLabels, true)}
                 <b>ยอดรวม:</b> ฿${formatMoneyDecimal(selectedVals.reduce((sum,m)=>sum+m.fee, 0))}<br>
                 <b>ช่องทาง:</b> ${method}
@@ -896,7 +934,7 @@ async function submitWalkIn() {
             }
             // 2. ลองบันทึกข้อมูลจริงที่นี่เลย เพื่อจับ Error เสี้ยววินาที (Race condition)
             Swal.showLoading();
-            const paymentResult = await processWalkInPayment(selectedCustomer.id, selectedVals, method, staffName, inputNo);
+            const paymentResult = await processWalkInPayment(selectedCustomer.id, selectedVals, method, staffName, inputNo, payDateVal, payNote);
             
             if (paymentResult && paymentResult.error === 'DUPLICATE_RECEIPT') {
                 Swal.hideLoading();
@@ -920,10 +958,14 @@ async function submitWalkIn() {
 
     if (r.isConfirmed) {
         const payment = r.value;
+        let uploadedReceiptUrl = '';
         
         if (payment) {
             Swal.fire({title: 'กำลังสร้างและบันทึกใบเสร็จ...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
-            await generateAndUploadReceipt(payment, pendingOnlineTransactionId);
+            uploadedReceiptUrl = (await generateAndUploadReceipt(payment, pendingOnlineTransactionId)) || '';
+            if (uploadedReceiptUrl && !payment.receipt_url) {
+                payment.receipt_url = uploadedReceiptUrl;
+            }
         }
 
         if (pendingOnlineTransactionId) {
@@ -942,147 +984,93 @@ async function submitWalkIn() {
 
         Swal.close();
         if (payment) {
-            Swal.fire({
-                title:'รับชำระสำเร็จ!',
-                html:`เลขใบเสร็จ: <b>${payment.receipt_no}</b>`,
-                icon:'success',
-                showCancelButton:true,
-                showDenyButton:true,
-                confirmButtonText:'พิมพ์ใบเสร็จ A4',
-                cancelButtonText:'พิมพ์ Slip',
-                denyButtonText:'ไปที่รายงาน',
-                denyButtonColor:'#059669',
-                confirmButtonColor:'#4f46e5',
-                cancelButtonColor:'#64748b'
-            }).then(r2 => {
-                if (r2.isConfirmed) printReceiptA4(payment);
-                else if (r2.dismiss === Swal.DismissReason.cancel) printReceiptSlip(payment);
-                else if (r2.isDenied) window.location.href = 'waste-reports.html';
-            });
+            window.currentSuccessPayment = payment;
+            openWalkInSuccessPopup(payment, uploadedReceiptUrl || payment.receipt_url || '');
             selectCustomer(selectedCustomer.id, selectedYear);
             refreshOnlinePayments();
         }
     }
 }
 
-async function generateAndUploadReceipt(p, txId) {
-    const container = document.createElement('div');
-    container.style.position = 'absolute';
-    container.style.left = '-9999px';
-    container.style.top = '0';
-    container.style.width = '800px';
-    container.style.background = '#fff';
-    container.style.padding = '40px';
-    
-    container.innerHTML = `
-        <div style="font-family: 'Sarabun', sans-serif; color: #333; background: #fff;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #06C755; padding-bottom: 10px;">
-                <div>
-                    <h2 style="margin: 0; color: #06C755; font-size: 24px;">ใบเสร็จรับเงิน</h2>
-                    <div style="color: #666; font-size: 16px;">เทศบาลตำบลตัวอย่างอัจฉริยะ (Smart Governance)</div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 18px; font-weight: bold;">เลขที่: ${p.receipt_no}</div>
-                    <div style="color: #666; font-size: 14px;">วันที่: ${new Date().toLocaleDateString('th-TH')}</div>
-                </div>
-            </div>
-            
-            <div style="margin-bottom: 30px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <table style="width: 100%; font-size: 16px;">
-                    <tr><td style="width: 150px; color: #666; padding-bottom: 8px;">ได้รับเงินจาก:</td><td style="font-weight: bold; padding-bottom: 8px;">${p.customer_name}</td></tr>
-                    <tr><td style="color: #666; padding-bottom: 8px;">ที่อยู่/บ้านเลขที่:</td><td style="padding-bottom: 8px;">${p.house_no}</td></tr>
-                    <tr><td style="color: #666;">ชำระผ่านช่องทาง:</td><td>${p.method}</td></tr>
-                </table>
-            </div>
-
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-                <thead>
-                    <tr style="background: #e9ecef;">
-                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; font-size: 16px;">รายการ</th>
-                        <th style="padding: 12px; text-align: right; border-bottom: 1px solid #dee2e6; font-size: 16px;">จำนวนเงิน (บาท)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td style="padding: 15px 12px; border-bottom: 1px solid #dee2e6;">
-                            <strong style="font-size: 16px;">ค่าธรรมเนียมเก็บขนขยะมูลฝอย</strong><br>
-                            <span style="color: #666; font-size: 14px;">ประจำเดือน: ${Array.isArray(p.months_paid) ? p.months_paid.join(', ') : p.months_paid}</span>
-                        </td>
-                        <td style="padding: 15px 12px; text-align: right; border-bottom: 1px solid #dee2e6; font-size: 16px;">
-                            ${Number(p.amount).toLocaleString('th-TH', {minimumFractionDigits: 2})}
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td style="padding: 15px 12px; text-align: right; font-weight: bold; font-size: 20px;">ยอดรวมสุทธิ</td>
-                        <td style="padding: 15px 12px; text-align: right; font-weight: bold; font-size: 20px; color: #06C755;">
-                            ${Number(p.amount).toLocaleString('th-TH', {minimumFractionDigits: 2})}
-                        </td>
-                    </tr>
-                </tfoot>
-            </table>
-
-            <div style="display: flex; justify-content: space-between; margin-top: 60px;">
-                <div style="text-align: center; width: 200px;">
-                    <div style="border-bottom: 1px dashed #999; margin-bottom: 10px;"></div>
-                    <div style="font-size: 14px;">ผู้ชำระเงิน</div>
-                </div>
-                <div style="text-align: center; width: 200px;">
-                    <div style="border-bottom: 1px dashed #999; margin-bottom: 10px; padding-bottom: 20px;">
-                        ${p.staff || 'ระบบอัตโนมัติ'}
-                    </div>
-                    <div style="font-size: 14px;">ผู้รับเงิน</div>
-                </div>
-            </div>
-            
-            <div style="text-align: center; margin-top: 40px; color: #999; font-size: 12px;">
-                เอกสารฉบับนี้ถูกสร้างขึ้นโดยระบบ Smart Governance อัตโนมัติ
-            </div>
-        </div>
-    `;
-    document.body.appendChild(container);
-    
-    try {
-        const canvas = await html2canvas(container, { scale: 2, useCORS: true, logging: false });
-        const base64Image = canvas.toDataURL('image/jpeg', 0.9);
-        
-        if (!GAS_RECEIPT_URL || GAS_RECEIPT_URL.includes('macros/s/')) {
-            // ดำเนินการต่อถ้ามี URL แล้ว
-        } else {
-             console.warn("GAS_RECEIPT_URL is not set.");
-             return null;
-        }
-
-        const response = await fetch(GAS_RECEIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                base64: base64Image,
-                filename: 'Receipt_' + p.receipt_no + '.jpg'
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success && result.imageUrl) {
-            if (txId && typeof supabaseClient !== 'undefined' && supabaseClient) {
-                await supabaseClient.from('garbage_payment_transactions').update({ receipt_url: result.imageUrl }).eq('id', txId);
-            } else if (txId) {
-                const local = JSON.parse(localStorage.getItem('garbage_payment_transactions') || '[]');
-                const idx = local.findIndex(x => x.id === txId);
-                if (idx >= 0) {
-                    local[idx].receipt_url = result.imageUrl;
-                    localStorage.setItem('garbage_payment_transactions', JSON.stringify(local));
-                }
-            }
-            return result.imageUrl;
-        }
-    } catch (err) {
-        console.error("Receipt upload error:", err);
-    } finally {
-        document.body.removeChild(container);
+function openWalkInSuccessPopup(payment, receiptUrl = '') {
+    window.currentSuccessPayment = payment;
+    if (receiptUrl && !payment.receipt_url) {
+        payment.receipt_url = receiptUrl;
     }
-    return null;
+
+    const popup = document.getElementById('walkInSuccessPopup');
+    if (!popup) return;
+
+    const recNoEl = document.getElementById('walkInSuccessReceiptNo');
+    if (recNoEl) recNoEl.textContent = payment.receipt_no || '-';
+
+    // Reset LINE notify button style for new receipt
+    const lineBtn = document.getElementById('btn-popup-line-notify');
+    if (lineBtn) {
+        const alreadyNotified = typeof notifiedPaymentIds !== 'undefined' && notifiedPaymentIds.has(payment.id);
+        if (alreadyNotified) {
+            lineBtn.className = 'btn btn-success text-white fw-bold rounded-pill px-4 py-2 shadow-sm';
+            lineBtn.innerHTML = '<i class="fa-brands fa-line me-1 fa-lg"></i> แจ้งชำระเงินแล้ว';
+        } else {
+            lineBtn.className = 'btn btn-outline-success fw-bold rounded-pill px-4 py-2 shadow-sm';
+            lineBtn.innerHTML = '<i class="fa-brands fa-line me-1 fa-lg"></i> แจ้งชำระเงิน';
+        }
+    }
+
+    popup.style.display = 'flex';
+}
+
+function closeWalkInSuccessPopup() {
+    const popup = document.getElementById('walkInSuccessPopup');
+    if (popup) popup.style.display = 'none';
+}
+
+function triggerSuccessLineNotify() {
+    const p = window.currentSuccessPayment;
+    if (!p) return;
+    const custId = p.customer_id || selectedCustomer?.id || '';
+    const recUrl = p.receipt_url || p.slip_url || '';
+    showLineNotifyModal(custId, 'PAYMENT_SUCCESS', String(p.amount || 0), p.receipt_no || '', p.id || '', recUrl);
+}
+
+function triggerSuccessPrintA4() {
+    if (window.currentSuccessPayment) {
+        printReceiptA4(window.currentSuccessPayment);
+    }
+}
+
+function triggerSuccessPrintSlip() {
+    if (window.currentSuccessPayment) {
+        printReceiptSlip(window.currentSuccessPayment);
+    }
+}
+
+async function generateAndUploadReceipt(p, txId) {
+    // 1. ใช้ autoSaveReceiptToDrive จาก waste-receipt.js เป็นหลัก เพื่อให้ได้ไฟล์ใบเสร็จ/สลิปเดียวกับหน้ารายงานรายรับ
+    if (typeof autoSaveReceiptToDrive === 'function') {
+        try {
+            const driveRes = await autoSaveReceiptToDrive(p);
+            const uploadedUrl = (driveRes && (driveRes.receiptUrl || driveRes.slipUrl)) || p.receipt_url || p.slip_url || '';
+            if (uploadedUrl) {
+                p.receipt_url = driveRes.receiptUrl || uploadedUrl;
+                if (driveRes.slipUrl) p.slip_url = driveRes.slipUrl;
+                if (txId && typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    await supabaseClient.from('garbage_payment_transactions').update({ receipt_url: uploadedUrl }).eq('id', txId);
+                } else if (txId) {
+                    const local = JSON.parse(localStorage.getItem('garbage_payment_transactions') || '[]');
+                    const idx = local.findIndex(x => x.id === txId);
+                    if (idx >= 0) {
+                        local[idx].receipt_url = uploadedUrl;
+                        localStorage.setItem('garbage_payment_transactions', JSON.stringify(local));
+                    }
+                }
+                return uploadedUrl;
+            }
+        } catch (err) {
+            console.warn('autoSaveReceiptToDrive error in generateAndUploadReceipt:', err);
+        }
+    }
+    return p.receipt_url || null;
 }
 
 function clearPayment() { 
@@ -1196,6 +1184,44 @@ function clearPayment() {
         }
     }
 </script>
+
+<!-- Persistent Payment Success Popup (ไม่หายไปเมื่อกดเมนูต่างๆ จนกว่าจะกดปุ่มปิด) -->
+<div id="walkInSuccessPopup" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1045; align-items:center; justify-content:center; padding:16px;">
+    <div class="bg-white rounded-4 shadow-lg position-relative text-center p-4" style="width:100%; max-width:520px; animation: fadeIn 0.2s ease-out;">
+        <button type="button" class="btn-close position-absolute" style="top:16px; right:16px;" onclick="closeWalkInSuccessPopup()" title="ปิดหน้าต่าง"></button>
+        
+        <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle" style="width:80px; height:80px; border:4px solid #a5dc86; color:#28a745;">
+            <i class="fa-solid fa-check" style="font-size:2.5rem;"></i>
+        </div>
+
+        <h3 class="fw-bold mb-2" style="color:#374151;">รับชำระสำเร็จ!</h3>
+        <div class="mb-3 fs-6 text-secondary">เลขใบเสร็จ: <b class="text-dark" id="walkInSuccessReceiptNo">-</b></div>
+
+        <div class="mb-4">
+            <button type="button" id="btn-popup-line-notify" class="btn btn-outline-success fw-bold rounded-pill px-4 py-2 shadow-sm" onclick="triggerSuccessLineNotify()">
+                <i class="fa-brands fa-line me-1 fa-lg"></i> แจ้งชำระเงิน
+            </button>
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-center gap-2 mb-3">
+            <button type="button" class="btn fw-semibold text-white px-3 py-2 rounded-3 shadow-sm" style="background-color:#4f46e5;" onclick="triggerSuccessPrintA4()">
+                <i class="fa-solid fa-print me-1"></i> พิมพ์ใบเสร็จ A4
+            </button>
+            <button type="button" class="btn fw-semibold text-white px-3 py-2 rounded-3 shadow-sm" style="background-color:#059669;" onclick="window.location.href='waste-reports.html'">
+                <i class="fa-solid fa-chart-bar me-1"></i> ไปที่รายงาน
+            </button>
+            <button type="button" class="btn fw-semibold text-white px-3 py-2 rounded-3 shadow-sm" style="background-color:#64748b;" onclick="triggerSuccessPrintSlip()">
+                <i class="fa-solid fa-receipt me-1"></i> พิมพ์ Slip
+            </button>
+        </div>
+
+        <div class="border-top pt-3 mt-2">
+            <button type="button" class="btn btn-danger fw-bold px-5 py-2 rounded-pill shadow-sm" onclick="closeWalkInSuccessPopup()">
+                <i class="fa-solid fa-xmark me-1"></i> ปิดหน้าต่าง
+            </button>
+        </div>
+    </div>
+</div>
 
 <!-- LINE Notification Modal -->
 <div class="modal fade" id="lineNotifyModal" tabindex="-1">

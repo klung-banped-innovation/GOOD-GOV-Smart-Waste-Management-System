@@ -3,66 +3,455 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เจ้าหน้าที่รับชำระ - GOOD GOV</title>
+    <title>จัดการเจ้าหน้าที่และกำหนดสิทธิ์ (RBAC) - GOOD GOV</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .custom-radio-card input:checked + label {
+            border-color: #1a56db !important;
+            background-color: #f0f7ff !important;
+            box-shadow: 0 0 0 2px rgba(26, 86, 219, 0.2);
+        }
+        .custom-radio-card label {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .custom-radio-card label:hover {
+            border-color: #93c5fd !important;
+        }
+        .perm-table th {
+            background: #f8fafc;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #334155;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .perm-table td {
+            vertical-align: middle;
+            padding: 0.65rem 0.75rem;
+        }
+        .perm-row:hover {
+            background-color: #f8fafc;
+        }
+        .perm-check-input {
+            width: 1.25rem;
+            height: 1.25rem;
+            cursor: pointer;
+        }
+        .perm-check-input.chk-edit:checked {
+            background-color: #16a34a;
+            border-color: #16a34a;
+        }
+        .perm-check-input.chk-view:checked {
+            background-color: #0284c7;
+            border-color: #0284c7;
+        }
+        .menu-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.73rem;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin: 2px;
+            font-weight: 600;
+        }
+        .menu-chip.chip-edit {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #86efac;
+        }
+        .menu-chip.chip-view {
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #7dd3fc;
+        }
+    </style>
 </head>
 <body>
 <nav id="sidebar"></nav>
 <div id="content">
-    <div id="top-navbar" class="top-navbar" data-title="ข้อมูลเจ้าหน้าที่รับชำระค่าธรรมเนียมขยะ"></div>
+    <div id="top-navbar" class="top-navbar" data-title="จัดการเจ้าหน้าที่และกำหนดสิทธิ์ระบบค่าธรรมเนียมขยะ (RBAC)"></div>
     <div class="page-content">
+        <!-- Header -->
         <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
             <div>
-                <h4 class="fw-bold mb-1"><i class="fa-solid fa-users-gear text-primary me-2"></i>เจ้าหน้าที่รับชำระ</h4>
+                <h4 class="fw-bold mb-1"><i class="fa-solid fa-user-shield text-primary me-2"></i>จัดการผู้ใช้งานและกำหนดสิทธิ์ (ระบบค่าธรรมเนียมขยะ)</h4>
                 <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0" style="font-size:0.8rem;">
                     <li class="breadcrumb-item"><a href="dashboard.html" class="text-decoration-none">แดชบอร์ด</a></li>
                     <li class="breadcrumb-item"><a href="finance.html" class="text-decoration-none">กองคลัง</a></li>
                     <li class="breadcrumb-item"><a href="waste-dashboard.html" class="text-decoration-none">ค่าธรรมเนียมขยะ</a></li>
-                    <li class="breadcrumb-item active">เจ้าหน้าที่</li>
+                    <li class="breadcrumb-item active">จัดการเจ้าหน้าที่และกำหนดสิทธิ์</li>
                 </ol></nav>
             </div>
-            <button class="btn btn-sm btn-primary fw-semibold" onclick="openAddStaff()"><i class="fa-solid fa-plus me-1"></i>เพิ่มเจ้าหน้าที่</button>
+            <div class="d-flex align-items-center gap-2">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary active" id="btnViewTable" onclick="switchStaffView('table')" title="มุมมองตาราง"><i class="fa-solid fa-table-list me-1"></i>ตารางสิทธิ์</button>
+                    <button type="button" class="btn btn-outline-secondary" id="btnViewCard" onclick="switchStaffView('card')" title="มุมมองการ์ด"><i class="fa-solid fa-grip me-1"></i>การ์ด</button>
+                </div>
+                <button class="btn btn-sm btn-primary fw-semibold px-3 shadow-sm" id="btnAddStaffMain" onclick="openAddStaff()">
+                    <i class="fa-solid fa-user-plus me-1"></i>เพิ่มเจ้าหน้าที่ / กำหนดสิทธิ์
+                </button>
+            </div>
         </div>
 
-        <div class="row g-3" id="staffCards"></div>
+        <!-- Notice Banner for non-admin -->
+        <div id="nonAdminAlert" class="alert alert-warning border-0 shadow-sm rounded-3 mb-4 d-none">
+            <i class="fa-solid fa-user-lock me-2"></i>
+            <strong>สิทธิ์การใช้งานของคุณ:</strong> คุณสามารถ<strong>แก้ไขข้อมูลส่วนตัว รูปโปรไฟล์ ลายเซ็น รวมถึง Username และรหัสผ่านของตัวเองได้</strong> แต่ไม่สามารถแก้ไขสิทธิ์ในการเข้าถึงเมนูต่างๆ ของตัวเอง หรือแก้ไขข้อมูลของผู้อื่นได้ (เฉพาะผู้ดูแลระบบ <strong>Admin</strong> เท่านั้น)
+        </div>
+
+        <!-- KPI Summary Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #1a56db;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1">เจ้าหน้าที่ทั้งหมด</div>
+                            <div class="kpi-value text-primary" id="kpiTotalStaff">0</div>
+                            <div class="text-xs text-muted mt-1">บัญชีในระบบค่าธรรมเนียมขยะ</div>
+                        </div>
+                        <div class="kpi-icon bg-primary bg-opacity-10 text-primary"><i class="fa-solid fa-users"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #dc2626;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1">ผู้ดูแลระบบ (Admin)</div>
+                            <div class="kpi-value text-danger" id="kpiAdminStaff">0</div>
+                            <div class="text-xs text-muted mt-1">แก้ไขได้ทุกเมนู + กำหนดสิทธิ์ได้</div>
+                        </div>
+                        <div class="kpi-icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-user-shield"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #0284c7;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1">กำหนดสิทธิ์รายเมนู (Officer)</div>
+                            <div class="kpi-value text-info" id="kpiOfficerStaff">0</div>
+                            <div class="text-xs text-muted mt-1">เข้าถึงตามเมนูที่ติ๊กอนุญาต</div>
+                        </div>
+                        <div class="kpi-icon bg-info bg-opacity-10 text-info"><i class="fa-solid fa-list-check"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card h-100" style="border-top: 4px solid #16a34a;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label mb-1">เปิดใช้งาน (Active)</div>
+                            <div class="kpi-value text-success" id="kpiActiveStaff">0</div>
+                            <div class="text-xs text-muted mt-1">สามารถเข้าสู่ระบบได้</div>
+                        </div>
+                        <div class="kpi-icon bg-success bg-opacity-10 text-success"><i class="fa-solid fa-circle-check"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="card mb-4">
+            <div class="card-body py-3">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-5">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                            <input type="text" class="form-control" id="staffSearchInput" placeholder="ค้นหาชื่อเจ้าหน้าที่, ตำแหน่ง, Username หรือเบอร์โทร..." oninput="renderStaff()">
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <select class="form-select form-select-sm" id="staffRoleFilter" onchange="renderStaff()">
+                            <option value="">ทุกบทบาท (All Roles)</option>
+                            <option value="Admin">Admin (แก้ไขได้ทั้งหมด)</option>
+                            <option value="Officer">Officer (กำหนดสิทธิ์รายเมนู)</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <select class="form-select form-select-sm" id="staffStatusFilter" onchange="renderStaff()">
+                            <option value="">ทุกสถานะ</option>
+                            <option value="active">เปิดใช้งาน</option>
+                            <option value="inactive">ระงับใช้งาน</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2 text-end">
+                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetStaffFilters()">
+                            <i class="fa-solid fa-rotate-left me-1"></i>รีเซ็ต
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table View (รูปแบบเดียวกับการตั้งค่าระบบ settings.html) -->
+        <div class="card shadow-sm" id="staffTableView">
+            <div class="card-header border-0 d-flex justify-content-between align-items-center py-3">
+                <h6 class="fw-bold mb-0"><i class="fa-solid fa-users-gear text-primary me-2"></i>รายชื่อผู้ใช้งานและสิทธิ์การเข้าถึงเมนู (Role-Based Access Control)</h6>
+                <span class="text-xs text-muted">คลิกปุ่ม <strong>"กำหนดสิทธิ์ / แก้ไข"</strong> เพื่อตั้งค่า User, รหัสผ่าน และติ๊กเลือกสิทธิ์แต่ละเมนู</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">ชื่อเจ้าหน้าที่ / ตำแหน่ง</th>
+                                <th>Username (รหัสผู้ใช้)</th>
+                                <th>เบอร์ติดต่อ / อีเมล</th>
+                                <th>ระดับสิทธิ์ (Role)</th>
+                                <th style="min-width: 280px;">สิทธิ์การเข้าถึงเมนูในระบบขยะ</th>
+                                <th class="text-center">สถานะ</th>
+                                <th class="pe-4 text-end">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staffTableBody">
+                            <tr><td colspan="7" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>กำลังโหลดข้อมูล...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card View -->
+        <div class="row g-3 d-none" id="staffCards"></div>
     </div>
 </div>
 
-<!-- Staff Modal -->
-<div class="modal fade" id="staffModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+<!-- Add / Edit Staff & Menu Permissions Modal (รูปแบบเดียวกับ settings.html) -->
+<div class="modal fade" id="staffModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 rounded-4 shadow-lg">
-            <div class="modal-header border-bottom"><h5 class="modal-title fw-bold" id="staffModalTitle"><i class="fa-solid fa-user-plus text-primary me-2"></i>เพิ่มเจ้าหน้าที่</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-header bg-light border-bottom">
+                <h5 class="modal-title fw-bold" id="staffModalTitle">
+                    <i class="fa-solid fa-user-shield text-primary me-2"></i>เพิ่มเจ้าหน้าที่และกำหนดสิทธิ์การใช้งาน
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
             <div class="modal-body p-4">
                 <form id="staffForm" onsubmit="saveStaff(event)">
                     <input type="hidden" id="sEditId">
-                    <div class="row g-3">
-                        <div class="col-12"><label class="form-label fw-semibold text-sm">ชื่อ-สกุล <span class="text-danger">*</span></label><input type="text" class="form-control" id="sName" required></div>
-                        <div class="col-md-6"><label class="form-label fw-semibold text-sm">ตำแหน่ง</label><input type="text" class="form-control" id="sPosition"></div>
-                        <div class="col-md-6"><label class="form-label fw-semibold text-sm">Username</label><input type="text" class="form-control" id="sUsername"></div>
-                        <div class="col-md-6"><label class="form-label fw-semibold text-sm">สิทธิ์</label><select class="form-select" id="sRole"><option>Admin</option><option>Finance Officer</option><option>Collector</option></select></div>
-                        <div class="col-md-6"><label class="form-label fw-semibold text-sm">เบอร์โทร</label><input type="text" class="form-control" id="sPhone"></div>
-                        
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold text-sm">รูปภาพประจำตัว</label>
-                            <input type="file" class="form-control form-control-sm" id="sProfileImage" accept="image/*" onchange="previewImage(this, 'profilePreview')">
-                            <div class="mt-2 text-center"><img id="profilePreview" src="" style="max-height: 100px; display: none; border-radius: 8px; border: 1px solid #ddd;"></div>
-                            <input type="hidden" id="sProfileImageUrl">
+                    <input type="hidden" id="sProfileImageUrl">
+                    <input type="hidden" id="sSignatureImageUrl">
+
+                    <div class="row g-4">
+                        <!-- Left Column: Profile, Account Credentials (User & Password like settings.html) -->
+                        <div class="col-lg-5">
+                            <div class="card border shadow-none h-100">
+                                <div class="card-header bg-white border-bottom py-2.5">
+                                    <h6 class="fw-bold mb-0 text-primary"><i class="fa-solid fa-id-card me-2"></i>1. ข้อมูลเจ้าหน้าที่และรหัสผู้ใช้งาน</h6>
+                                </div>
+                                <div class="card-body">
+                                    <!-- Avatar & Signature Upload -->
+                                    <div class="row g-2 mb-3 text-center">
+                                        <div class="col-6">
+                                            <div class="p-2 border rounded-3 bg-light">
+                                                <div class="position-relative d-inline-block mb-1">
+                                                    <img src="https://ui-avatars.com/api/?name=Staff&background=e2e8f0&color=64748b&size=100"
+                                                         id="profilePreview" class="rounded-circle border shadow-sm object-fit-cover" width="76" height="76" alt="Avatar">
+                                                    <label for="sProfileImage" class="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle shadow-sm"
+                                                           style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;" title="อัปโหลดรูปประจำตัว">
+                                                        <i class="fa-solid fa-camera fa-xs"></i>
+                                                    </label>
+                                                    <input type="file" class="d-none" id="sProfileImage" accept="image/*" onchange="previewAvatarImage(this)">
+                                                </div>
+                                                <div class="text-xs fw-semibold text-dark">รูปภาพประจำตัว</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="p-2 border rounded-3 bg-light h-100 d-flex flex-column justify-content-between align-items-center">
+                                                <div class="d-flex align-items-center justify-content-center" style="height:76px;width:100%;">
+                                                    <img id="signaturePreview" src="" style="max-height:70px;max-width:100%;display:none;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">
+                                                    <div id="signaturePlaceholder" class="text-muted text-xs"><i class="fa-solid fa-signature fs-4 d-block mb-1 opacity-50"></i>ยังไม่มีลายเซ็น</div>
+                                                </div>
+                                                <label for="sSignatureImage" class="btn btn-xs btn-outline-secondary rounded-pill px-2 mt-1" style="cursor:pointer;font-size:0.72rem;">
+                                                    <i class="fa-solid fa-upload me-1"></i>อัปโหลดลายเซ็นใบเสร็จ
+                                                </label>
+                                                <input type="file" class="d-none" id="sSignatureImage" accept="image/*" onchange="previewSignatureImage(this)">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Title, First Name, Last Name (Same structure as settings.html) -->
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-4">
+                                            <label class="form-label text-xs fw-semibold mb-1">คำนำหน้า <span class="text-danger">*</span></label>
+                                            <select class="form-select form-select-sm" id="sTitle" required>
+                                                <option value="นาย">นาย</option>
+                                                <option value="นาง">นาง</option>
+                                                <option value="นางสาว">นางสาว</option>
+                                                <option value="ว่าที่ ร.ต.">ว่าที่ ร.ต.</option>
+                                                <option value="ดร.">ดร.</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label text-xs fw-semibold mb-1">ชื่อ <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control form-control-sm" id="sFirstName" placeholder="ชื่อ" required>
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label text-xs fw-semibold mb-1">นามสกุล <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control form-control-sm" id="sLastName" placeholder="นามสกุล" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-6">
+                                            <label class="form-label text-xs fw-semibold mb-1">ตำแหน่ง <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control form-control-sm" id="sPosition" placeholder="เช่น เจ้าพนักงานจัดเก็บรายได้" required>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label text-xs fw-semibold mb-1">สังกัด</label>
+                                            <select class="form-select form-select-sm" id="sDepartment">
+                                                <option value="กองคลัง" selected>กองคลัง</option>
+                                                <option value="สำนักปลัดเทศบาล">สำนักปลัดเทศบาล</option>
+                                                <option value="กองสาธารณสุขและสิ่งแวดล้อม">กองสาธารณสุขและสิ่งแวดล้อม</option>
+                                                <option value="กองช่าง">กองช่าง</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-6">
+                                            <label class="form-label text-xs fw-semibold mb-1">เบอร์ติดต่อ</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-phone text-muted"></i></span>
+                                                <input type="tel" class="form-control" id="sPhone" placeholder="08X-XXX-XXXX">
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label text-xs fw-semibold mb-1">อีเมล</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-envelope text-muted"></i></span>
+                                                <input type="email" class="form-control" id="sEmail" placeholder="email@muni.go.th">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <hr class="my-3">
+
+                                    <!-- Username & Password Section (Same as settings.html) -->
+                                    <div class="p-3 rounded-3" style="background:#f8fafc; border:1px solid #cbd5e1;">
+                                        <div class="fw-bold text-sm text-dark mb-2">
+                                            <i class="fa-solid fa-key text-warning me-1"></i>ข้อมูลบัญชีเข้าสู่ระบบ (User & รหัสผ่าน)
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label text-xs fw-semibold mb-1">รหัสผู้ใช้งาน (Username / ID) <span class="text-danger">*</span></label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-white"><i class="fa-solid fa-user-shield text-primary"></i></span>
+                                                <input type="text" class="form-control fw-semibold" id="sUsername" placeholder="กำหนด Username สำหรับเข้าสู่ระบบ" required>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="form-label text-xs fw-semibold mb-1">รหัสผ่าน (Password) <span class="text-danger">*</span></label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-white"><i class="fa-solid fa-lock text-primary"></i></span>
+                                                <input type="password" class="form-control" id="sPassword" placeholder="กำหนดรหัสผ่านเข้าสู่ระบบ" required>
+                                                <button class="btn btn-outline-secondary bg-white" type="button" onclick="toggleStaffPwVisibility()" title="แสดง/ซ่อนรหัสผ่าน">
+                                                    <i class="fa-regular fa-eye" id="sPasswordEye"></i>
+                                                </button>
+                                            </div>
+                                            <div class="form-text" style="font-size:0.72rem;">ใช้เข้าสู่ระบบที่หน้า Login หลักของระบบเทศบาล</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold text-sm">ภาพลายเซ็น</label>
-                            <input type="file" class="form-control form-control-sm" id="sSignatureImage" accept="image/*" onchange="previewImage(this, 'signaturePreview')">
-                            <div class="mt-2 text-center"><img id="signaturePreview" src="" style="max-height: 100px; display: none; border-radius: 8px; border: 1px solid #ddd;"></div>
-                            <input type="hidden" id="sSignatureImageUrl">
+
+                        <!-- Right Column: Role Selection & Per-Menu Permission Matrix -->
+                        <div class="col-lg-7">
+                            <div class="card border shadow-none h-100">
+                                <div class="card-header bg-white border-bottom py-2.5 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <h6 class="fw-bold mb-0 text-primary"><i class="fa-solid fa-shield-halved me-2"></i>2. กำหนดระดับสิทธิ์และการเข้าถึงแต่ละเมนู</h6>
+                                    <span class="badge bg-primary-subtle text-primary" id="permSummaryBadge">แก้ไขได้ 13 เมนู</span>
+                                </div>
+                                <div class="card-body">
+                                    <div id="selfEditPermLockNotice" class="alert alert-warning py-2 px-3 mb-3 text-xs border-0 d-none">
+                                        <i class="fa-solid fa-lock me-1"></i>
+                                        <strong>ล็อกการแก้ไขสิทธิ์เมนู:</strong> คุณสามารถแก้ไขข้อมูลส่วนตัวและ User / Password ของตัวเองได้ แต่<strong>ไม่สามารถแก้ไขระดับสิทธิ์หรือสิทธิ์ในการเข้าถึงเมนูต่างๆ ของตัวเองได้</strong> (เฉพาะ Admin เท่านั้น)
+                                    </div>
+                                    <!-- Role Cards -->
+                                    <label class="form-label text-xs fw-bold text-uppercase text-muted mb-2">เลือกบทบาทหลัก (Role)</label>
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-md-6">
+                                            <div class="custom-radio-card h-100">
+                                                <input class="form-check-input d-none" type="radio" name="sRoleRadio" id="roleAdminRadio" value="Admin" onchange="onRoleRadioChange('Admin')">
+                                                <label class="w-100 p-2.5 border rounded-3 bg-white h-100 d-block p-3" for="roleAdminRadio">
+                                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                                        <span class="badge bg-danger"><i class="fa-solid fa-crown me-1"></i>1. Admin (ผู้ดูแลระบบขยะ)</span>
+                                                    </div>
+                                                    <div class="text-xs text-muted">เข้าถึงและ<strong>แก้ไขได้ทั้งหมดทุกเมนู</strong> รวมถึงกำหนดสิทธิ์ให้รายชื่ออื่นในการเข้าถึงเมนูต่างๆ ได้</div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="custom-radio-card h-100">
+                                                <input class="form-check-input d-none" type="radio" name="sRoleRadio" id="roleOfficerRadio" value="Officer" checked onchange="onRoleRadioChange('Officer')">
+                                                <label class="w-100 p-2.5 border rounded-3 bg-white h-100 d-block p-3" for="roleOfficerRadio">
+                                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                                        <span class="badge bg-primary"><i class="fa-solid fa-user-check me-1"></i>2. เจ้าหน้าที่ (กำหนดสิทธิ์รายเมนู)</span>
+                                                    </div>
+                                                    <div class="text-xs text-muted">ติ๊กเลือกสิทธิ์รายเมนูด้านล่าง ว่าจะให้ <strong>"แก้ไขได้"</strong> หรือ <strong>"ดูได้อย่างเดียว"</strong></div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Quick Bulk Actions for Menu Matrix -->
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                        <div class="text-xs fw-bold text-dark">
+                                            <i class="fa-solid fa-list-check text-primary me-1"></i>ตารางกำหนดสิทธิ์รายเมนู (ติ๊กถูกเพื่อกำหนดสิทธิ์)
+                                        </div>
+                                        <div class="d-flex gap-1 flex-wrap" id="bulkPermButtons">
+                                            <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2" onclick="setAllMenuPerms('edit')">
+                                                <i class="fa-solid fa-pen-to-square me-1"></i>ให้แก้ไขได้ทุกเมนู
+                                            </button>
+                                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2" onclick="setAllMenuPerms('view')">
+                                                <i class="fa-solid fa-eye me-1"></i>ให้ดูอย่างเดียวทุกเมนู
+                                            </button>
+                                            <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2" onclick="setAllMenuPerms('none')">
+                                                <i class="fa-solid fa-ban me-1"></i>ล้างทั้งหมด
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Menu Permissions Table -->
+                                    <div class="table-responsive border rounded-3" style="max-height: 360px; overflow-y: auto;">
+                                        <table class="table perm-table mb-0">
+                                            <thead style="position: sticky; top: 0; z-index: 2;">
+                                                <tr>
+                                                    <th class="ps-3">เมนูในระบบค่าธรรมเนียมขยะ</th>
+                                                    <th class="text-center" style="width: 135px;">
+                                                        <i class="fa-solid fa-eye text-info me-1"></i>ดูได้อย่างเดียว
+                                                    </th>
+                                                    <th class="text-center" style="width: 135px;">
+                                                        <i class="fa-solid fa-pen-to-square text-success me-1"></i>แก้ไขเมนูนี้ได้
+                                                    </th>
+                                                    <th class="text-center pe-3" style="width: 110px;">สิทธิ์ที่ได้</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="menuPermTableBody">
+                                                <!-- Injected via JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="text-xs text-muted mt-2">
+                                        <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                                        <strong>คำแนะนำ:</strong> ติ๊กช่อง <strong>"ดูได้อย่างเดียว"</strong> เพื่อให้เปิดดูข้อมูลได้แต่กดเพิ่ม/ลบ/แก้ไขไม่ได้ • ติ๊กช่อง <strong>"แก้ไขเมนูนี้ได้"</strong> เพื่อให้ทั้งดูและแก้ไขข้อมูลได้ • หากไม่ติ๊กเลยทั้ง 2 ช่อง เมนูนั้นจะถูกซ่อนจากผู้ใช้งานรายนี้
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
                     <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
                         <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">ยกเลิก</button>
-                        <button type="submit" class="btn btn-primary px-4 fw-semibold"><i class="fa-solid fa-save me-1"></i>บันทึก</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-semibold shadow-sm" id="btnSaveStaffSubmit" data-allow-self-edit="true">
+                            <i class="fa-solid fa-save me-1"></i>บันทึกข้อมูลและสิทธิ์ผู้ใช้งาน
+                        </button>
                     </div>
                 </form>
             </div>
@@ -77,95 +466,544 @@
 <script src="assets/js/waste.js"></script>
 <script src="assets/js/responsive.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', async function() { 
-    initWasteData(); 
-    await fetchWasteStaff();
-    renderStaff(); 
+let currentViewMode = 'table';
+let currentModalPerms = {};
+let isSelfEditOnlyMode = false;
+
+document.addEventListener('DOMContentLoaded', async function() {
+    const staffModalEl = document.getElementById('staffModal');
+    if (staffModalEl) staffModalEl.setAttribute('data-allow-self-edit', 'true');
+
+    Swal.fire({ title: 'กำลังโหลดข้อมูลผู้ใช้งานและสิทธิ์...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+        initWasteData();
+        await fetchWasteStaff();
+        checkCurrentAdminPrivilege();
+        renderStaff();
+        Swal.close();
+    } catch (e) {
+        console.error(e);
+        Swal.close();
+    }
 });
 
+function isCurrentUserWasteAdmin() {
+    const user = typeof getSessionUser === 'function' ? getSessionUser() : null;
+    if (!user) return false;
+    const roleLower = String(user.role || '').toLowerCase();
+    const wasteRoleLower = String(user.waste_role || '').toLowerCase();
+    if (roleLower === 'super admin' || roleLower === 'admin' || roleLower === 'department head' || wasteRoleLower === 'admin') {
+        return true;
+    }
+    // Check if matched in waste_staff as Admin
+    const staffList = getWasteStaff();
+    const matched = staffList.find(s =>
+        (s.username && user.username && s.username === user.username) ||
+        (s.name && user.name && s.name === user.name)
+    );
+    if (matched && String(matched.role).toLowerCase() === 'admin') return true;
+    // Also check if waste-staff permission is 'edit'
+    if (user.waste_permissions && user.waste_permissions['waste-staff'] === 'edit') return true;
+    return false;
+}
+
+function isSelfStaffRecord(s) {
+    if (!s) return false;
+    const user = typeof getSessionUser === 'function' ? getSessionUser() : null;
+    if (!user) return false;
+    if (s.username && user.username && String(s.username).trim().toLowerCase() === String(user.username).trim().toLowerCase()) {
+        return true;
+    }
+    if (s.id && user.id && String(s.id) === String(user.id)) {
+        return true;
+    }
+    if (s.name && user.name && (String(s.name).trim() === String(user.name).trim() || String(s.name).includes(String(user.name).trim()) || String(user.name).includes(String(s.name).trim()))) {
+        return true;
+    }
+    return false;
+}
+
+function checkCurrentAdminPrivilege() {
+    const isAdmin = isCurrentUserWasteAdmin();
+    const alertEl = document.getElementById('nonAdminAlert');
+    const addBtn = document.getElementById('btnAddStaffMain');
+    if (!isAdmin) {
+        if (alertEl) alertEl.classList.remove('d-none');
+        if (addBtn) addBtn.style.display = 'none';
+    } else {
+        if (alertEl) alertEl.classList.add('d-none');
+        if (addBtn) addBtn.style.display = '';
+    }
+}
+
+function switchStaffView(mode) {
+    currentViewMode = mode;
+    document.getElementById('btnViewTable').classList.toggle('active', mode === 'table');
+    document.getElementById('btnViewCard').classList.toggle('active', mode === 'card');
+    document.getElementById('staffTableView').classList.toggle('d-none', mode !== 'table');
+    document.getElementById('staffCards').classList.toggle('d-none', mode !== 'card');
+}
+
+function resetStaffFilters() {
+    document.getElementById('staffSearchInput').value = '';
+    document.getElementById('staffRoleFilter').value = '';
+    document.getElementById('staffStatusFilter').value = '';
+    renderStaff();
+}
+
+function toggleStaffPwVisibility() {
+    const pwEl = document.getElementById('sPassword');
+    const eyeEl = document.getElementById('sPasswordEye');
+    if (pwEl.type === 'password') {
+        pwEl.type = 'text';
+        eyeEl.className = 'fa-regular fa-eye-slash';
+    } else {
+        pwEl.type = 'password';
+        eyeEl.className = 'fa-regular fa-eye';
+    }
+}
+
+function countPermissions(perms, role) {
+    const isAdmin = String(role || '').toLowerCase() === 'admin';
+    let editCount = 0;
+    let viewCount = 0;
+    let noneCount = 0;
+    WASTE_SYSTEM_MENUS.forEach(m => {
+        const p = isAdmin ? 'edit' : ((perms && perms[m.key]) || 'none');
+        if (p === 'edit') editCount++;
+        else if (p === 'view') viewCount++;
+        else noneCount++;
+    });
+    return { editCount, viewCount, noneCount };
+}
+
+function buildPermissionChipsHTML(perms, role) {
+    const isAdmin = String(role || '').toLowerCase() === 'admin';
+    if (isAdmin) {
+        return `
+            <div class="mb-1">
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1">
+                    <i class="fa-solid fa-unlock-keyhole me-1"></i>สิทธิ์ผู้ดูแลระบบ: ดูและแก้ไขได้ทุกเมนู (${WASTE_SYSTEM_MENUS.length} เมนู)
+                </span>
+            </div>
+        `;
+    }
+
+    const editMenus = [];
+    const viewMenus = [];
+    WASTE_SYSTEM_MENUS.forEach(m => {
+        const p = (perms && perms[m.key]) || 'none';
+        if (p === 'edit') editMenus.push(m.label);
+        else if (p === 'view') viewMenus.push(m.label);
+    });
+
+    let html = '<div class="d-flex flex-wrap align-items-center">';
+    editMenus.forEach(lbl => {
+        html += `<span class="menu-chip chip-edit" title="แก้ไขได้"><i class="fa-solid fa-pen"></i>${lbl}</span>`;
+    });
+    viewMenus.forEach(lbl => {
+        html += `<span class="menu-chip chip-view" title="ดูได้อย่างเดียว"><i class="fa-solid fa-eye"></i>${lbl}</span>`;
+    });
+    if (editMenus.length === 0 && viewMenus.length === 0) {
+        html += `<span class="text-xs text-muted fst-italic">ยังไม่ได้กำหนดสิทธิ์เมนู</span>`;
+    }
+    html += '</div>';
+    return html;
+}
+
 function renderStaff() {
-    const staff = getWasteStaff();
-    const roleBadge = r => r==='Admin'?'bg-danger':r==='Finance Officer'?'bg-primary':'bg-success';
-    document.getElementById('staffCards').innerHTML = staff.map(s => `
-        <div class="col-md-6 col-lg-4">
-            <div class="card hover-lift">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center gap-3 mb-3">
-                        ${s.profile_image_url 
-                            ? `<img src="${s.profile_image_url}" alt="Profile" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:2px solid #e5e7eb;">`
-                            : `<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,#1a56db,#3b82f6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem;font-weight:700;">
-                                ${s.name.charAt(0)}
-                               </div>`
-                        }
+    const allStaff = getWasteStaff();
+    const isAdminUser = isCurrentUserWasteAdmin();
+
+    // Update KPI Cards
+    const adminTotal = allStaff.filter(s => String(s.role).toLowerCase() === 'admin').length;
+    const officerTotal = allStaff.length - adminTotal;
+    const activeTotal = allStaff.filter(s => s.status === 'active').length;
+
+    document.getElementById('kpiTotalStaff').textContent = allStaff.length;
+    document.getElementById('kpiAdminStaff').textContent = adminTotal;
+    document.getElementById('kpiOfficerStaff').textContent = officerTotal;
+    document.getElementById('kpiActiveStaff').textContent = activeTotal;
+
+    // Filter
+    const q = (document.getElementById('staffSearchInput')?.value || '').trim().toLowerCase();
+    const roleFilter = document.getElementById('staffRoleFilter')?.value || '';
+    const statusFilter = document.getElementById('staffStatusFilter')?.value || '';
+
+    const filtered = allStaff.filter(s => {
+        const isRoleAdmin = String(s.role).toLowerCase() === 'admin';
+        if (roleFilter === 'Admin' && !isRoleAdmin) return false;
+        if (roleFilter === 'Officer' && isRoleAdmin) return false;
+        if (statusFilter && s.status !== statusFilter) return false;
+        if (q) {
+            const hay = `${s.name || ''} ${s.position || ''} ${s.username || ''} ${s.phone || ''} ${s.email || ''}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    });
+
+    // 1. Render Table View
+    const tbody = document.getElementById('staffTableBody');
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted"><i class="fa-solid fa-users-slash fs-3 d-block mb-2 opacity-50"></i>ไม่พบรายชื่อเจ้าหน้าที่ตามเงื่อนไขที่ค้นหา</td></tr>`;
+    } else {
+        tbody.innerHTML = filtered.map(s => {
+            const isRoleAdmin = String(s.role).toLowerCase() === 'admin';
+            const isSelf = isSelfStaffRecord(s);
+            const avatarSrc = s.profile_image_url
+                ? getDriveThumbnail(s.profile_image_url)
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'S')}&background=${isRoleAdmin ? 'dc2626' : '1a56db'}&color=fff&size=80`;
+
+            return `
+            <tr ${isSelf ? 'style="background-color: #f0f9ff;"' : ''}>
+                <td class="ps-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <img src="${avatarSrc}" class="rounded-circle border shadow-sm object-fit-cover" width="42" height="42"
+                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'S')}&background=1a56db&color=fff'">
                         <div>
-                            <h6 class="fw-bold mb-0">${s.name}</h6>
-                            <span class="text-xs text-muted">${s.position||'-'}</span>
+                            <div class="fw-bold text-dark" style="font-size:0.92rem;">
+                                ${s.name || '-'}
+                                ${isSelf ? '<span class="badge bg-info text-white ms-1" style="font-size:0.68rem;">บัญชีของคุณ</span>' : ''}
+                            </div>
+                            <div class="text-xs text-muted">
+                                ${s.position || 'เจ้าหน้าที่กองคลัง'} • ${s.department || 'กองคลัง'}
+                                ${s.signature_image_url ? '<span class="badge bg-light text-secondary border ms-1" title="มีลายเซ็นใบเสร็จแล้ว"><i class="fa-solid fa-signature text-success"></i> มีลายเซ็น</span>' : ''}
+                            </div>
                         </div>
                     </div>
-                    <div class="mb-2"><span class="text-xs text-muted">Username:</span> <span class="text-sm fw-semibold">${s.username||'-'}</span></div>
-                    <div class="mb-2"><span class="text-xs text-muted">เบอร์โทร:</span> <span class="text-sm">${s.phone||'-'}</span></div>
-                    <div class="d-flex justify-content-between align-items-center mt-3">
+                </td>
+                <td>
+                    ${s.username
+                        ? `<span class="badge bg-light text-dark border px-2.5 py-1 font-monospace" style="font-size:0.82rem;"><i class="fa-solid fa-user text-primary me-1"></i>${s.username}</span>`
+                        : `<span class="text-xs text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>ยังไม่ตั้ง Username</span>`}
+                </td>
+                <td>
+                    <div class="text-xs"><i class="fa-solid fa-phone text-muted me-1"></i>${s.phone || '-'}</div>
+                    <div class="text-xs text-muted"><i class="fa-solid fa-envelope text-muted me-1"></i>${s.email || '-'}</div>
+                </td>
+                <td>
+                    ${isRoleAdmin
+                        ? `<span class="badge bg-danger px-2.5 py-1"><i class="fa-solid fa-crown me-1"></i>Admin</span>`
+                        : `<span class="badge bg-primary px-2.5 py-1"><i class="fa-solid fa-user-check me-1"></i>Officer</span>`}
+                </td>
+                <td>
+                    ${buildPermissionChipsHTML(s.permissions, s.role)}
+                </td>
+                <td class="text-center">
+                    <div class="form-check form-switch d-inline-block mb-0">
+                        <input class="form-check-input" type="checkbox" ${s.status === 'active' ? 'checked' : ''}
+                               ${!isAdminUser ? 'disabled' : ''}
+                               onchange="toggleStaff('${s.id}')" title="เปิด/ปิดการใช้งาน">
+                    </div>
+                </td>
+                <td class="pe-4 text-end">
+                    ${isAdminUser ? `
+                        <button class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1 fw-semibold" onclick="editStaff('${s.id}')">
+                            <i class="fa-solid fa-user-shield me-1"></i>กำหนดสิทธิ์ / แก้ไข
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger rounded-circle" style="width:32px;height:32px;padding:0;" onclick="confirmDeleteStaff('${s.id}', '${(s.name || '').replace(/'/g, "\\'")}')" title="ลบรายชื่อ">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    ` : isSelf ? `
+                        <button class="btn btn-sm btn-primary rounded-pill px-3 fw-semibold shadow-sm" data-allow-self-edit="true" onclick="editStaff('${s.id}')">
+                            <i class="fa-solid fa-user-pen me-1"></i>แก้ไขข้อมูลส่วนตัว / รหัสผ่าน
+                        </button>
+                    ` : `
+                        <span class="badge bg-light text-muted border"><i class="fa-solid fa-lock me-1"></i>เฉพาะ Admin</span>
+                    `}
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    // 2. Render Card View
+    const cardsContainer = document.getElementById('staffCards');
+    cardsContainer.innerHTML = filtered.map(s => {
+        const isRoleAdmin = String(s.role).toLowerCase() === 'admin';
+        const isSelf = isSelfStaffRecord(s);
+        const counts = countPermissions(s.permissions, s.role);
+        return `
+        <div class="col-md-6 col-lg-4">
+            <div class="card hover-lift h-100 ${isSelf ? 'border-primary' : ''}">
+                <div class="card-body p-4 d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            ${s.profile_image_url
+                                ? `<img src="${getDriveThumbnail(s.profile_image_url)}" alt="Profile" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #e5e7eb;">`
+                                : `<div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,${isRoleAdmin ? '#dc2626,#ef4444' : '#1a56db,#3b82f6'});display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem;font-weight:700;">
+                                    ${(s.name || 'S').charAt(0)}
+                                   </div>`
+                            }
+                            <div>
+                                <h6 class="fw-bold mb-0">${s.name || '-'} ${isSelf ? '<span class="badge bg-info text-white ms-1" style="font-size:0.65rem;">บัญชีของคุณ</span>' : ''}</h6>
+                                <span class="text-xs text-muted">${s.position || 'เจ้าหน้าที่กองคลัง'}</span>
+                            </div>
+                        </div>
+                        <div class="mb-1"><span class="text-xs text-muted">Username:</span> <span class="text-sm fw-semibold font-monospace">${s.username || '-'}</span></div>
+                        <div class="mb-2"><span class="text-xs text-muted">เบอร์โทร:</span> <span class="text-sm">${s.phone || '-'}</span></div>
+                        <div class="p-2 rounded bg-light border mb-3">
+                            <div class="text-xs fw-bold text-dark mb-1">สิทธิ์การเข้าถึงเมนูระบบขยะ:</div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">แก้ไขได้ ${counts.editCount} เมนู</span>
+                                <span class="badge bg-info-subtle text-info border border-info-subtle">ดูอย่างเดียว ${counts.viewCount} เมนู</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
                         <div>
-                            <span class="badge ${roleBadge(s.role)} me-1">${s.role}</span>
-                            <span class="badge ${s.status==='active'?'bg-success':'bg-secondary'}">${s.status==='active'?'ใช้งาน':'ปิดใช้งาน'}</span>
+                            <span class="badge ${isRoleAdmin ? 'bg-danger' : 'bg-primary'} me-1">${isRoleAdmin ? 'Admin' : 'Officer'}</span>
+                            <span class="badge ${s.status === 'active' ? 'bg-success' : 'bg-secondary'}">${s.status === 'active' ? 'ใช้งาน' : 'ปิดใช้งาน'}</span>
                         </div>
+                        ${isAdminUser ? `
                         <div class="d-flex gap-1">
-                            <button class="btn btn-xs btn-outline-primary" onclick="editStaff('${s.id}')" title="แก้ไข"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn btn-xs btn-outline-warning" onclick="resetPassword('${s.id}')" title="Reset Password"><i class="fa-solid fa-key"></i></button>
-                            <button class="btn btn-xs btn-outline-${s.status==='active'?'danger':'success'}" onclick="toggleStaff('${s.id}')" title="${s.status==='active'?'ปิดใช้งาน':'เปิดใช้งาน'}">
-                                <i class="fa-solid fa-${s.status==='active'?'ban':'check'}"></i>
+                            <button class="btn btn-xs btn-outline-primary" onclick="editStaff('${s.id}')" title="กำหนดสิทธิ์ / แก้ไข"><i class="fa-solid fa-user-shield me-1"></i>กำหนดสิทธิ์</button>
+                            <button class="btn btn-xs btn-outline-${s.status === 'active' ? 'danger' : 'success'}" onclick="toggleStaff('${s.id}')" title="${s.status === 'active' ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}">
+                                <i class="fa-solid fa-${s.status === 'active' ? 'ban' : 'check'}"></i>
                             </button>
-                        </div>
+                        </div>` : isSelf ? `
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-xs btn-primary" data-allow-self-edit="true" onclick="editStaff('${s.id}')" title="แก้ไขข้อมูลส่วนตัวและรหัสผ่าน"><i class="fa-solid fa-user-pen me-1"></i>แก้ไขข้อมูลส่วนตัว</button>
+                        </div>` : ''}
                     </div>
                 </div>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
+// =============================================
+// MENU PERMISSION MATRIX LOGIC IN MODAL
+// =============================================
+function renderModalPermissionTable() {
+    const roleVal = document.querySelector('input[name="sRoleRadio"]:checked')?.value || 'Officer';
+    const isAdmin = roleVal === 'Admin';
+    const isLocked = isAdmin || isSelfEditOnlyMode;
+    const tbody = document.getElementById('menuPermTableBody');
+    const bulkBtns = document.getElementById('bulkPermButtons');
+
+    if (isAdmin) {
+        WASTE_SYSTEM_MENUS.forEach(m => { currentModalPerms[m.key] = 'edit'; });
+    }
+
+    if (bulkBtns) {
+        if (isSelfEditOnlyMode) {
+            bulkBtns.classList.add('d-none');
+        } else {
+            bulkBtns.classList.remove('d-none');
+            bulkBtns.style.opacity = isAdmin ? '0.5' : '1';
+        }
+    }
+
+    let editTotal = 0;
+    let viewTotal = 0;
+
+    tbody.innerHTML = WASTE_SYSTEM_MENUS.map(m => {
+        const perm = isAdmin ? 'edit' : (currentModalPerms[m.key] || 'none');
+        if (perm === 'edit') editTotal++;
+        else if (perm === 'view') viewTotal++;
+
+        const isViewChecked = perm === 'view';
+        const isEditChecked = perm === 'edit';
+
+        let statusBadge = '<span class="badge bg-light text-muted border">ไม่เข้าถึง</span>';
+        if (isEditChecked) {
+            statusBadge = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-pen me-1"></i>แก้ไขได้</span>';
+        } else if (isViewChecked) {
+            statusBadge = '<span class="badge bg-info-subtle text-info border border-info-subtle"><i class="fa-solid fa-eye me-1"></i>ดูอย่างเดียว</span>';
+        }
+
+        return `
+        <tr class="perm-row">
+            <td class="ps-3">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-2 bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width:30px;height:30px;flex-shrink:0;">
+                        <i class="${m.icon}" style="font-size:0.85rem;"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold text-dark" style="font-size:0.86rem;">${m.label}</div>
+                        <div class="text-muted" style="font-size:0.72rem;">${m.desc}</div>
+                    </div>
+                </div>
+            </td>
+            <td class="text-center">
+                <input type="checkbox" class="form-check-input perm-check-input chk-view"
+                       id="chk_view_${m.key}"
+                       ${isViewChecked ? 'checked' : ''}
+                       ${isLocked ? 'disabled' : ''}
+                       onchange="onMenuPermCheck('${m.key}', 'view', this.checked)">
+            </td>
+            <td class="text-center">
+                <input type="checkbox" class="form-check-input perm-check-input chk-edit"
+                       id="chk_edit_${m.key}"
+                       ${isEditChecked ? 'checked' : ''}
+                       ${isLocked ? 'disabled' : ''}
+                       onchange="onMenuPermCheck('${m.key}', 'edit', this.checked)">
+            </td>
+            <td class="text-center pe-3" id="perm_badge_${m.key}">
+                ${statusBadge}
+            </td>
+        </tr>`;
+    }).join('');
+
+    const summaryBadge = document.getElementById('permSummaryBadge');
+    if (summaryBadge) {
+        summaryBadge.textContent = `แก้ไขได้ ${editTotal} เมนู • ดูอย่างเดียว ${viewTotal} เมนู`;
+    }
+}
+
+function onMenuPermCheck(menuKey, mode, isChecked) {
+    if (isSelfEditOnlyMode) return;
+    if (isChecked) {
+        currentModalPerms[menuKey] = mode; // 'view' or 'edit'
+    } else {
+        currentModalPerms[menuKey] = 'none';
+    }
+    renderModalPermissionTable();
+}
+
+function onRoleRadioChange(roleVal) {
+    if (isSelfEditOnlyMode) return;
+    if (roleVal === 'Admin') {
+        currentModalPerms = getDefaultWastePermissions('Admin');
+    } else {
+        currentModalPerms = getDefaultWastePermissions('Officer');
+    }
+    renderModalPermissionTable();
+}
+
+function setAllMenuPerms(level) {
+    if (isSelfEditOnlyMode) return;
+    const roleVal = document.querySelector('input[name="sRoleRadio"]:checked')?.value || 'Officer';
+    if (roleVal === 'Admin') return;
+    WASTE_SYSTEM_MENUS.forEach(m => {
+        currentModalPerms[m.key] = level;
+    });
+    renderModalPermissionTable();
+}
+
+// =============================================
+// ADD / EDIT / SAVE STAFF
+// =============================================
 function openAddStaff() {
+    if (!isCurrentUserWasteAdmin()) {
+        Swal.fire('ไม่มีสิทธิ์ดำเนินการ', 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถเพิ่มเจ้าหน้าที่และกำหนดสิทธิ์ได้', 'warning');
+        return;
+    }
+    isSelfEditOnlyMode = false;
     document.getElementById('sEditId').value = '';
-    document.getElementById('staffModalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-primary me-2"></i>เพิ่มเจ้าหน้าที่';
+    document.getElementById('staffModalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-primary me-2"></i>เพิ่มเจ้าหน้าที่และกำหนดสิทธิ์การใช้งาน';
+    document.getElementById('btnSaveStaffSubmit').innerHTML = '<i class="fa-solid fa-save me-1"></i>บันทึกข้อมูลและสิทธิ์ผู้ใช้งาน';
+    document.getElementById('selfEditPermLockNotice')?.classList.add('d-none');
+    document.getElementById('roleAdminRadio').disabled = false;
+    document.getElementById('roleOfficerRadio').disabled = false;
     document.getElementById('staffForm').reset();
-    document.getElementById('profilePreview').style.display = 'none';
-    document.getElementById('profilePreview').src = '';
+
+    document.getElementById('profilePreview').src = 'https://ui-avatars.com/api/?name=New+Staff&background=e2e8f0&color=64748b&size=100';
     document.getElementById('sProfileImageUrl').value = '';
     document.getElementById('signaturePreview').style.display = 'none';
     document.getElementById('signaturePreview').src = '';
+    document.getElementById('signaturePlaceholder').style.display = 'block';
     document.getElementById('sSignatureImageUrl').value = '';
+
+    document.getElementById('roleOfficerRadio').checked = true;
+    currentModalPerms = getDefaultWastePermissions('Officer');
+    renderModalPermissionTable();
+
     new bootstrap.Modal(document.getElementById('staffModal')).show();
 }
 
 function editStaff(id) {
     const s = getWasteStaff().find(x => x.id === id);
     if (!s) return;
+
+    const isAdmin = isCurrentUserWasteAdmin();
+    const isSelf = isSelfStaffRecord(s);
+    if (!isAdmin && !isSelf) {
+        Swal.fire('ไม่มีสิทธิ์ดำเนินการ', 'คุณสามารถแก้ไขได้เฉพาะข้อมูลส่วนตัวและรหัสผ่านของตัวเองเท่านั้น', 'warning');
+        return;
+    }
+
+    isSelfEditOnlyMode = !isAdmin && isSelf;
+
     document.getElementById('sEditId').value = s.id;
-    document.getElementById('staffModalTitle').innerHTML = '<i class="fa-solid fa-pen text-warning me-2"></i>แก้ไขเจ้าหน้าที่';
-    document.getElementById('sName').value = s.name;
-    document.getElementById('sPosition').value = s.position||'';
-    document.getElementById('sUsername').value = s.username||'';
-    document.getElementById('sRole').value = s.role;
-    document.getElementById('sPhone').value = s.phone||'';
-    
+    if (isSelfEditOnlyMode) {
+        document.getElementById('staffModalTitle').innerHTML = `<i class="fa-solid fa-user-pen text-primary me-2"></i>แก้ไขข้อมูลส่วนตัวและรหัสผ่านของคุณ: ${s.name}`;
+        document.getElementById('btnSaveStaffSubmit').innerHTML = `<i class="fa-solid fa-save me-1"></i>บันทึกข้อมูลส่วนตัวและรหัสผ่าน`;
+        document.getElementById('selfEditPermLockNotice')?.classList.remove('d-none');
+        document.getElementById('roleAdminRadio').disabled = true;
+        document.getElementById('roleOfficerRadio').disabled = true;
+    } else {
+        document.getElementById('staffModalTitle').innerHTML = `<i class="fa-solid fa-user-shield text-warning me-2"></i>กำหนดสิทธิ์และแก้ไขข้อมูล: ${s.name}`;
+        document.getElementById('btnSaveStaffSubmit').innerHTML = `<i class="fa-solid fa-save me-1"></i>บันทึกข้อมูลและสิทธิ์ผู้ใช้งาน`;
+        document.getElementById('selfEditPermLockNotice')?.classList.add('d-none');
+        document.getElementById('roleAdminRadio').disabled = false;
+        document.getElementById('roleOfficerRadio').disabled = false;
+    }
+
+    document.getElementById('sTitle').value = s.title || 'นาย';
+    document.getElementById('sFirstName').value = s.first_name || s.name || '';
+    document.getElementById('sLastName').value = s.last_name || '';
+    document.getElementById('sPosition').value = s.position || '';
+    document.getElementById('sDepartment').value = s.department || 'กองคลัง';
+    document.getElementById('sPhone').value = s.phone || '';
+    document.getElementById('sEmail').value = s.email || '';
+    document.getElementById('sUsername').value = s.username || '';
+    document.getElementById('sPassword').value = s.password || '';
+
+    const isRoleAdmin = String(s.role).toLowerCase() === 'admin';
+    if (isRoleAdmin) {
+        document.getElementById('roleAdminRadio').checked = true;
+    } else {
+        document.getElementById('roleOfficerRadio').checked = true;
+    }
+
+    currentModalPerms = Object.assign({}, getDefaultWastePermissions(s.role), s.permissions || {});
+    renderModalPermissionTable();
+
     if (s.profile_image_url) {
-        document.getElementById('profilePreview').src = s.profile_image_url;
-        document.getElementById('profilePreview').style.display = 'inline-block';
+        document.getElementById('profilePreview').src = getDriveThumbnail(s.profile_image_url);
         document.getElementById('sProfileImageUrl').value = s.profile_image_url;
     } else {
-        document.getElementById('profilePreview').style.display = 'none';
+        document.getElementById('profilePreview').src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'S')}&background=1a56db&color=fff&size=100`;
         document.getElementById('sProfileImageUrl').value = '';
     }
-    
+
     if (s.signature_image_url) {
         document.getElementById('signaturePreview').src = s.signature_image_url;
         document.getElementById('signaturePreview').style.display = 'inline-block';
+        document.getElementById('signaturePlaceholder').style.display = 'none';
         document.getElementById('sSignatureImageUrl').value = s.signature_image_url;
     } else {
         document.getElementById('signaturePreview').style.display = 'none';
+        document.getElementById('signaturePlaceholder').style.display = 'block';
         document.getElementById('sSignatureImageUrl').value = '';
     }
-    
+
     new bootstrap.Modal(document.getElementById('staffModal')).show();
+}
+
+function previewAvatarImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('profilePreview').src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function previewSignatureImage(input) {
+    const preview = document.getElementById('signaturePreview');
+    const placeholder = document.getElementById('signaturePlaceholder');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.style.display = 'inline-block';
+            if (placeholder) placeholder.style.display = 'none';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
 }
 
 function getBase64(file) {
@@ -177,54 +1015,71 @@ function getBase64(file) {
     });
 }
 
-function previewImage(input, previewId) {
-    const preview = document.getElementById(previewId);
-    if (input.files && input.files[0]) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            preview.src = e.target.result;
-            preview.style.display = 'inline-block';
-        }
-        reader.readAsDataURL(input.files[0]);
-    } else {
-        preview.src = '';
-        preview.style.display = 'none';
-    }
-}
-
 async function saveStaff(e) {
     e.preventDefault();
     const staff = getWasteStaff();
     const editId = document.getElementById('sEditId').value;
-    
-    let data = { 
-        name: document.getElementById('sName').value, 
-        position: document.getElementById('sPosition').value, 
-        username: document.getElementById('sUsername').value, 
-        role: document.getElementById('sRole').value, 
-        phone: document.getElementById('sPhone').value, 
+    const isAdmin = isCurrentUserWasteAdmin();
+    const existingStaff = editId ? staff.find(s => s.id === editId) : null;
+
+    if (!isAdmin) {
+        if (!existingStaff || !isSelfStaffRecord(existingStaff)) {
+            Swal.fire('ไม่มีสิทธิ์ดำเนินการ', 'คุณสามารถแก้ไขได้เฉพาะข้อมูลส่วนตัวและรหัสผ่านของตัวเองเท่านั้น', 'warning');
+            return;
+        }
+    }
+
+    const title = document.getElementById('sTitle').value;
+    const firstName = document.getElementById('sFirstName').value.trim();
+    const lastName = document.getElementById('sLastName').value.trim();
+    const fullName = `${title}${firstName}${lastName ? ' ' + lastName : ''}`.trim();
+
+    // หากไม่ใช่ Admin (เป็นการแก้ไขข้อมูลส่วนตัวของตัวเอง) ให้ล็อก role และ permissions เดิมไว้ ห้ามเปลี่ยนแปลงเด็ดขาด
+    let roleVal = document.querySelector('input[name="sRoleRadio"]:checked')?.value || 'Officer';
+    let finalPerms = roleVal === 'Admin'
+        ? getDefaultWastePermissions('Admin')
+        : Object.assign({}, currentModalPerms);
+
+    if (!isAdmin && existingStaff) {
+        roleVal = existingStaff.role || 'Officer';
+        finalPerms = Object.assign({}, getDefaultWastePermissions(roleVal), existingStaff.permissions || {});
+    }
+
+    let data = {
+        title: title,
+        first_name: firstName,
+        last_name: lastName,
+        name: fullName,
+        position: document.getElementById('sPosition').value.trim(),
+        department: document.getElementById('sDepartment').value,
+        username: document.getElementById('sUsername').value.trim(),
+        password: document.getElementById('sPassword').value,
+        role: roleVal,
+        phone: document.getElementById('sPhone').value.trim(),
+        email: document.getElementById('sEmail').value.trim(),
+        permissions: finalPerms,
         status: 'active',
         profile_image_url: document.getElementById('sProfileImageUrl').value,
         signature_image_url: document.getElementById('sSignatureImageUrl').value
     };
-    
-    if (editId) { 
-        const idx = staff.findIndex(s => s.id === editId); 
-        if(idx>=0) {
-            data.id = editId;
-            data.status = staff[idx].status;
-        } 
-    } else { 
-        data.id = 'WS' + String(staff.length+1).padStart(3,'0'); 
+
+    if (editId) {
+        const idx = staff.findIndex(s => s.id === editId);
+        data.id = editId;
+        if (idx >= 0) data.status = staff[idx].status;
+    } else {
+        const maxNum = staff.reduce((acc, s) => {
+            const m = String(s.id || '').match(/WS(\d+)/);
+            return m ? Math.max(acc, parseInt(m[1], 10)) : acc;
+        }, 0);
+        data.id = 'WS' + String(maxNum + 1).padStart(3, '0');
     }
 
-    // Process Images
     const profileFile = document.getElementById('sProfileImage').files[0];
     const signatureFile = document.getElementById('sSignatureImage').files[0];
-    
+
     if (profileFile || signatureFile) {
-        Swal.fire({title: 'กำลังบันทึกและอัปโหลดรูปภาพ...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
-        
+        Swal.fire({ title: 'กำลังบันทึกและอัปโหลดรูปภาพ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         if (profileFile) {
             const b64 = await getBase64(profileFile);
             const url = await uploadWasteStaffImage(b64, data.id + "_profile.jpg");
@@ -236,35 +1091,76 @@ async function saveStaff(e) {
             if (url) data.signature_image_url = url;
         }
     } else {
-        Swal.fire({title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+        Swal.fire({ title: 'กำลังบันทึกข้อมูลผู้ใช้งาน...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     }
 
-    // Save to DB and Local
     const success = await saveWasteStaffDB(data);
-    
+
     if (success) {
-        bootstrap.Modal.getInstance(document.getElementById('staffModal')).hide();
+        // อัปเดตข้อมูล Session ของตัวเองทันทีหากเป็นการแก้ไขบัญชีตัวเอง
+        if (isSelfStaffRecord(data) || (existingStaff && isSelfStaffRecord(existingStaff))) {
+            try {
+                const currUser = typeof getSessionUser === 'function' ? getSessionUser() : null;
+                if (currUser) {
+                    currUser.name = data.name;
+                    currUser.username = data.username;
+                    if (data.profile_image_url) currUser.avatar = data.profile_image_url;
+                    currUser.waste_role = data.role;
+                    currUser.waste_permissions = data.permissions;
+                    if (localStorage.getItem('sgov_user')) localStorage.setItem('sgov_user', JSON.stringify(currUser));
+                    if (sessionStorage.getItem('sgov_user')) sessionStorage.setItem('sgov_user', JSON.stringify(currUser));
+                    if (typeof buildNavbar === 'function') {
+                        const navbar = document.getElementById('top-navbar');
+                        buildNavbar(navbar?.dataset?.title || document.title.split(' - ')[0]);
+                    }
+                }
+            } catch (err) {}
+        }
+
+        const modalInstance = bootstrap.Modal.getInstance(document.getElementById('staffModal'));
+        if (modalInstance) modalInstance.hide();
         Swal.close();
-        showToast('บันทึกข้อมูลเจ้าหน้าที่สำเร็จ','success');
+        showToast(isSelfEditOnlyMode ? 'บันทึกข้อมูลส่วนตัวและรหัสผ่านสำเร็จ' : 'บันทึกข้อมูลเจ้าหน้าที่และกำหนดสิทธิ์สำเร็จ', 'success');
         renderStaff();
-    } else {
-        // ให้ error popup แสดงต่อไป
-        bootstrap.Modal.getInstance(document.getElementById('staffModal')).hide();
+        if (typeof buildSidebar === 'function') buildSidebar();
     }
 }
 
-function resetPassword(id) { Swal.fire({title:'Reset Password?',icon:'question',showCancelButton:true,confirmButtonText:'Reset'}).then(r=>{if(r.isConfirmed)showToast('Reset Password สำเร็จ','success');}); }
-
 async function toggleStaff(id) {
+    if (!isCurrentUserWasteAdmin()) return;
     const staff = getWasteStaff();
     const s = staff.find(x => x.id === id);
     if (!s) return;
     s.status = s.status === 'active' ? 'inactive' : 'active';
-    Swal.fire({title: 'กำลังอัปเดต...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+    Swal.fire({ title: 'กำลังอัปเดตสถานะ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     await saveWasteStaffDB(s);
     Swal.close();
-    showToast(`${s.status==='active'?'เปิด':'ปิด'}ใช้งาน ${s.name} แล้ว`,'success');
+    showToast(`${s.status === 'active' ? 'เปิด' : 'ปิด'}ใช้งาน ${s.name} แล้ว`, 'success');
     renderStaff();
+}
+
+function confirmDeleteStaff(id, name) {
+    if (!isCurrentUserWasteAdmin()) return;
+    Swal.fire({
+        title: 'ยืนยันการลบรายชื่อ?',
+        text: `คุณต้องการลบข้อมูลและสิทธิ์ของ "${name}" หรือไม่?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'ลบรายชื่อ',
+        cancelButtonText: 'ยกเลิก'
+    }).then(async (res) => {
+        if (res.isConfirmed) {
+            Swal.fire({ title: 'กำลังลบข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const ok = await deleteWasteStaffDB(id);
+            Swal.close();
+            if (ok) {
+                showToast(`ลบรายชื่อ ${name} เรียบร้อยแล้ว`, 'success');
+                renderStaff();
+            }
+        }
+    });
 }
 </script>
 </body>

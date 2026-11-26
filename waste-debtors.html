@@ -30,11 +30,11 @@
                     <li class="breadcrumb-item active">ลูกหนี้ค้างชำระ</li>
                 </ol></nav>
             </div>
-            <div class="d-flex align-items-center mb-3 mb-md-0">
-                <button class="btn btn-sm btn-primary me-2" onclick="printAllDebtLetters()"><i class="fa-solid fa-print me-1"></i>พิมพ์ทวงหนี้ทั้งหมด</button>
+            <div class="d-flex align-items-center mb-3 mb-md-0 flex-wrap gap-2">
+                <button class="btn btn-sm btn-primary" onclick="printAllDebtLetters()"><i class="fa-solid fa-print me-1"></i>พิมพ์ทวงหนี้ทั้งหมด</button>
                 <button class="btn btn-sm btn-outline-danger" onclick="sendBulkLineNotification()"><i class="fa-brands fa-line me-1"></i>แจ้งเตือนทั้งหมด</button>
-                <button class="btn btn-sm btn-outline-success ms-2" onclick="showToast('Export Excel สำเร็จ','success')"><i class="fa-solid fa-file-excel me-1"></i>Export</button>
-                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="showToast('Export PDF สำเร็จ','success')"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+                <button class="btn btn-sm btn-outline-success fw-semibold" onclick="exportDebtorsExcel()" title="ส่งออกรายงานลูกหนี้ค้างชำระ (Excel) ตามตัวกรอง"><i class="fa-solid fa-file-excel me-1"></i>Export</button>
+                <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="exportDebtorsPDF()" title="พิมพ์รายงานลูกหนี้ค้างชำระ (PDF) ตามตัวกรอง"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
             </div>
         </div>
 
@@ -220,6 +220,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/js/supabase-client.js"></script>
 <script src="assets/js/app.js?v=20261113"></script>
@@ -241,6 +242,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     try {
         initWasteData();
         await Promise.all([
+            (typeof fetchWasteSettings === 'function' ? fetchWasteSettings() : Promise.resolve()),
             fetchWasteFeeTypes(),
             fetchWasteCustomers(),
             fetchMonthlyStatus()
@@ -503,8 +505,831 @@ function renderDebtors() {
         }
     }
 
-    // Store globally for printAllDebtLetters
+    // Store globally for printAllDebtLetters & official Excel/PDF exports
     window.currentFilteredDebtors = debtors;
+    window.currentDebtorReportMeta = {
+        fiscalYear: year,
+        startIdx: startIdx,
+        endIdx: endIdx,
+        monthCount: monthCount,
+        rangeLabelShort: rangeLabelShort,
+        rangeDesc: rangeDesc,
+        mooFilter: mooFilter,
+        levelFilter: f,
+        searchQuery: (document.getElementById('debtSearch').value || '').trim(),
+        totalActiveCustomers: activeCustomers.length,
+        estRevenueRange: estRevenueRange,
+        estRevenueFullYear: estRevenueFullYear,
+        paidCompleteCount: paidCompleteCount,
+        paidAmountInRange: paidAmountInRange,
+        totalDebtorsCount: debtors.length,
+        totalDebtAmount: totalDebtAmount
+    };
+}
+
+function getOfficialDebtorReportContext() {
+    if (!window.currentFilteredDebtors || !window.currentDebtorReportMeta) {
+        renderDebtors();
+    }
+    const debtors = window.currentFilteredDebtors || [];
+    const meta = window.currentDebtorReportMeta || {};
+    let settings = {};
+    try {
+        settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
+    } catch (e) {}
+
+    const orgName = settings.org_name || 'เทศบาลเมืองบ้านเป็ด';
+    const orgAddress = settings.org_address || '';
+    const orgPhone = settings.org_phone || '';
+    const subdistrict = settings.org_subdistrict_name || 'บ้านเป็ด';
+    const district = (settings.org_district_name || 'เมืองขอนแก่น').replace(/^อำเภอ|^อ\./, '');
+    const province = (settings.org_province_name || 'ขอนแก่น').replace(/^จังหวัด|^จ\./, '');
+    const baseHref = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+    const defaultGaruda = baseHref + 'assets/img/garuda.png';
+    let logoUrl = settings.org_logo || defaultGaruda;
+    if (logoUrl && !logoUrl.startsWith('http') && !logoUrl.startsWith('data:')) {
+        logoUrl = baseHref + logoUrl.replace(/^\//, '');
+    }
+
+    const levelLabels = {
+        '': 'ทุกระดับการค้างชำระ',
+        '1-2': 'ค้างชำระ 1 - 2 เดือน',
+        '3-6': 'ค้างชำระ 3 - 6 เดือน',
+        '6+': 'ค้างชำระเกิน 6 เดือน'
+    };
+    const mooLabel = meta.mooFilter ? `หมู่ที่ ${meta.mooFilter}` : 'ทุกหมู่บ้าน (หมู่ที่ 1 - 23)';
+    const levelLabel = levelLabels[meta.levelFilter || ''] || 'ทุกระดับการค้างชำระ';
+    const searchLabel = meta.searchQuery ? `คำค้นหา "${meta.searchQuery}"` : 'ทั้งหมด';
+
+    const thMonthsFull = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+    const now = new Date();
+    const printDateThai = `${now.getDate()} ${thMonthsFull[now.getMonth()]} พ.ศ. ${now.getFullYear() + 543}`;
+    const printTimeThai = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+
+    const sessionUser = typeof getSessionUser === 'function' ? getSessionUser() : null;
+    const reporterName = (sessionUser && sessionUser.name) ? sessionUser.name : '......................................................';
+    const reporterPosition = (sessionUser && sessionUser.position) ? sessionUser.position : 'เจ้าหน้าที่จัดเก็บรายได้ / ผู้จัดทำรายงาน';
+
+    return {
+        debtors,
+        meta,
+        orgName,
+        orgAddress,
+        orgPhone,
+        subdistrict,
+        district,
+        province,
+        logoUrl,
+        defaultGaruda,
+        mooLabel,
+        levelLabel,
+        searchLabel,
+        printDateThai,
+        printTimeThai,
+        reporterName,
+        reporterPosition
+    };
+}
+
+function numberToThaiBahtTextDebtor(amount) {
+    const num = Number(amount || 0);
+    if (isNaN(num) || num <= 0) return 'ศูนย์บาทถ้วน';
+    const txtNum = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+    const txtWeight = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+
+    function convertInt(nStr) {
+        let res = '';
+        const len = nStr.length;
+        for (let i = 0; i < len; i++) {
+            const digit = parseInt(nStr.charAt(i), 10);
+            const pos = len - i - 1;
+            const weightIdx = pos % 6;
+            if (digit !== 0) {
+                if (weightIdx === 1 && digit === 1) res += '';
+                else if (weightIdx === 1 && digit === 2) res += 'ยี่';
+                else if (weightIdx === 0 && digit === 1 && len > 1 && parseInt(nStr.charAt(i - 1), 10) !== 0) res += 'เอ็ด';
+                else res += txtNum[digit];
+                res += txtWeight[weightIdx];
+            }
+            if (pos > 0 && weightIdx === 0) res += 'ล้าน';
+        }
+        return res;
+    }
+
+    const parts = num.toFixed(2).split('.');
+    const baht = parseInt(parts[0], 10);
+    const satang = parseInt(parts[1], 10);
+    let result = baht > 0 ? convertInt(String(baht)) + 'บาท' : '';
+    if (satang > 0) result += convertInt(String(satang)) + 'สตางค์';
+    else result += 'ถ้วน';
+    return result;
+}
+
+function exportDebtorsExcel() {
+    const ctx = getOfficialDebtorReportContext();
+    const { debtors, meta } = ctx;
+
+    if (!debtors || debtors.length === 0) {
+        Swal.fire('ไม่มีข้อมูลลูกหนี้ค้างชำระ', 'ไม่พบรายการลูกหนี้ค้างชำระตามเงื่อนไขตัวกรองที่เลือก', 'warning');
+        return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+        Swal.fire('เกิดข้อผิดพลาด', 'ไม่พบไลบรารีสร้างไฟล์ Excel กรุณารีเฟรชหน้าเว็บ', 'error');
+        return;
+    }
+
+    Swal.fire({
+        title: 'กำลังสร้างไฟล์รายงาน Excel...',
+        text: `จำนวน ${formatMoney(debtors.length)} รายการ`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    setTimeout(() => {
+        try {
+            const wb = XLSX.utils.book_new();
+
+            // ==========================================
+            // Sheet 1: ทะเบียนลูกหนี้ค้างชำระ (ตามตัวกรอง)
+            // ==========================================
+            const aoa = [
+                [`บัญชีรายชื่อลูกหนี้ค้างชำระค่าธรรมเนียมจัดการสิ่งปฏิกูลและมูลฝอย ประจำปีงบประมาณ พ.ศ. ${meta.fiscalYear}`],
+                [`หน่วยงาน: ${ctx.orgName} ตำบล${ctx.subdistrict} อำเภอ${ctx.district} จังหวัด${ctx.province}`],
+                [`เงื่อนไขตัวกรอง: ช่วงเดือน ${meta.rangeDesc} | พื้นที่: ${ctx.mooLabel} | ระดับการค้าง: ${ctx.levelLabel}${meta.searchQuery ? ` | ค้นหา: ${meta.searchQuery}` : ''}`],
+                [`ข้อมูล ณ วันที่ ${ctx.printDateThai} เวลา ${ctx.printTimeThai} | จำนวนลูกหนี้ค้างชำระรวม ${formatMoney(debtors.length)} ราย | ยอดค้างชำระรวมทั้งสิ้น ${formatMoneyDecimal(meta.totalDebtAmount)} บาท (${numberToThaiBahtTextDebtor(meta.totalDebtAmount)})`],
+                [],
+                [
+                    'ลำดับที่',
+                    'รหัสผู้ใช้น้ำ/ขยะ',
+                    'ชื่อ - นามสกุล (เจ้าบ้าน/ผู้ชำระ)',
+                    'บ้านเลขที่',
+                    'หมู่ที่',
+                    'ตำบล',
+                    'ประเภทสถานที่',
+                    'อัตราค่าธรรมเนียม/เดือน (บาท)',
+                    'จำนวนเดือนที่ค้าง (เดือน)',
+                    'รายละเอียดเดือนที่ค้างชำระ',
+                    'ยอดค้างชำระรวม (บาท)',
+                    'ชำระครั้งล่าสุด',
+                    'เบอร์โทรศัพท์',
+                    'ระดับการค้างชำระ',
+                    'หมายเหตุ'
+                ]
+            ];
+
+            let sumMonths = 0;
+            let sumDebt = 0;
+
+            debtors.forEach((d, idx) => {
+                const feeNum = Number(d.fee) || 0;
+                const debtNum = Number(d.total_debt) || 0;
+                const countNum = Number(d.unpaid_count) || 0;
+                sumMonths += countNum;
+                sumDebt += debtNum;
+
+                aoa.push([
+                    idx + 1,
+                    d.id || '-',
+                    (d.name && d.name !== '-') ? d.name : '-',
+                    d.house_no || '-',
+                    d.moo || '-',
+                    d.subdistrict || ctx.subdistrict,
+                    d.type || 'บ้านทั่วไป',
+                    feeNum,
+                    countNum,
+                    Array.isArray(d.unpaid_months) ? d.unpaid_months.join(', ') : '',
+                    debtNum,
+                    d.last_paid || '-',
+                    d.phone || '-',
+                    getDebtBadgeLabel(countNum),
+                    d.note || ''
+                ]);
+            });
+
+            // แถวสรุปยอดรวมท้ายตาราง
+            aoa.push([
+                '',
+                '',
+                `รวมทั้งสิ้น (${formatMoney(debtors.length)} ราย)`,
+                '',
+                '',
+                '',
+                '',
+                '',
+                sumMonths,
+                `ตัวอักษร: (${numberToThaiBahtTextDebtor(sumDebt)})`,
+                sumDebt,
+                '',
+                '',
+                '',
+                ''
+            ]);
+
+            aoa.push([]);
+            aoa.push([
+                '',
+                '',
+                `ลงชื่อ ...................................................... ผู้จัดทำรายงาน (${ctx.reporterName})`,
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                `ลงชื่อ ...................................................... หัวหน้างาน/ผู้อำนวยการกองคลัง`,
+                '',
+                '',
+                '',
+                '',
+                ''
+            ]);
+
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 14 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 14 } },
+                { s: { r: 2, c: 0 }, e: { r: 2, c: 14 } },
+                { s: { r: 3, c: 0 }, e: { r: 3, c: 14 } }
+            ];
+            ws['!cols'] = [
+                { wch: 9 },   // ลำดับที่
+                { wch: 15 },  // รหัสลูกค้า
+                { wch: 28 },  // ชื่อ-สกุล
+                { wch: 13 },  // บ้านเลขที่
+                { wch: 8 },   // หมู่ที่
+                { wch: 13 },  // ตำบล
+                { wch: 16 },  // ประเภท
+                { wch: 20 },  // อัตรา/เดือน
+                { wch: 18 },  // จำนวนเดือนค้าง
+                { wch: 46 },  // รายละเอียดเดือนที่ค้าง
+                { wch: 20 },  // ยอดค้างชำระรวม
+                { wch: 16 },  // ชำระล่าสุด
+                { wch: 15 },  // เบอร์โทร
+                { wch: 16 },  // ระดับการค้าง
+                { wch: 24 }   // หมายเหตุ
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, 'บัญชีลูกหนี้ค้างชำระ');
+
+            // ==========================================
+            // Sheet 2: สรุปยอดลูกหนี้ค้างชำระแยกตามหมู่บ้าน
+            // ==========================================
+            const mooMap = {};
+            debtors.forEach(d => {
+                const mKey = d.moo ? String(d.moo).trim() : 'ไม่ระบุ';
+                if (!mooMap[mKey]) {
+                    mooMap[mKey] = {
+                        moo: mKey,
+                        count: 0,
+                        lvl12: 0,
+                        lvl36: 0,
+                        lvl6plus: 0,
+                        totalDebt: 0
+                    };
+                }
+                mooMap[mKey].count++;
+                if (d.unpaid_count <= 2) mooMap[mKey].lvl12++;
+                else if (d.unpaid_count <= 6) mooMap[mKey].lvl36++;
+                else mooMap[mKey].lvl6plus++;
+                mooMap[mKey].totalDebt += (Number(d.total_debt) || 0);
+            });
+
+            const sortedMoos = Object.values(mooMap).sort((a, b) => {
+                const na = parseInt(a.moo, 10);
+                const nb = parseInt(b.moo, 10);
+                if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                return String(a.moo).localeCompare(String(b.moo));
+            });
+
+            const summaryAoa = [
+                [`ตารางสรุปสถิติลูกหนี้ค้างชำระค่าธรรมเนียมขยะมูลฝอย แยกตามหมู่บ้าน ประจำปีงบประมาณ พ.ศ. ${meta.fiscalYear}`],
+                [`หน่วยงาน: ${ctx.orgName} | ช่วงเดือนที่ตรวจสอบ: ${meta.rangeDesc} | พื้นที่: ${ctx.mooLabel} | ระดับ: ${ctx.levelLabel}`],
+                [`ข้อมูล ณ วันที่ ${ctx.printDateThai} เวลา ${ctx.printTimeThai}`],
+                [],
+                [
+                    'ลำดับ',
+                    'หมู่ที่',
+                    'จำนวนลูกหนี้ค้างชำระ (ราย)',
+                    'ค้าง 1-2 เดือน (ราย)',
+                    'ค้าง 3-6 เดือน (ราย)',
+                    'ค้างเกิน 6 เดือน (ราย)',
+                    'จำนวนเงินค้างชำระรวม (บาท)',
+                    'คิดเป็นร้อยละของยอดค้าง (%)'
+                ]
+            ];
+
+            sortedMoos.forEach((m, idx) => {
+                const pct = sumDebt > 0 ? Number(((m.totalDebt / sumDebt) * 100).toFixed(2)) : 0;
+                summaryAoa.push([
+                    idx + 1,
+                    m.moo === 'ไม่ระบุ' ? 'ไม่ระบุหมู่' : `หมู่ที่ ${m.moo}`,
+                    m.count,
+                    m.lvl12,
+                    m.lvl36,
+                    m.lvl6plus,
+                    m.totalDebt,
+                    pct
+                ]);
+            });
+
+            summaryAoa.push([
+                '',
+                'รวมทั้งสิ้น',
+                debtors.length,
+                debtors.filter(d => d.unpaid_count <= 2).length,
+                debtors.filter(d => d.unpaid_count >= 3 && d.unpaid_count <= 6).length,
+                debtors.filter(d => d.unpaid_count > 6).length,
+                sumDebt,
+                100.00
+            ]);
+
+            const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+            wsSummary['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
+                { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } }
+            ];
+            wsSummary['!cols'] = [
+                { wch: 10 },
+                { wch: 16 },
+                { wch: 24 },
+                { wch: 20 },
+                { wch: 20 },
+                { wch: 20 },
+                { wch: 26 },
+                { wch: 24 }
+            ];
+
+            XLSX.utils.book_append_sheet(wb, wsSummary, 'สรุปแยกตามหมู่บ้าน');
+
+            const mooFileSuffix = meta.mooFilter ? `_หมู่${meta.mooFilter}` : '_ทุกหมู่';
+            const rangeFileSuffix = `_${meta.rangeLabelShort.replace(/\s+/g, '')}`;
+            const fileName = `รายงานลูกหนี้ค้างชำระ_ปีงบ${meta.fiscalYear}${mooFileSuffix}${rangeFileSuffix}.xlsx`;
+
+            XLSX.writeFile(wb, fileName);
+            Swal.close();
+            showToast(`ส่งออกไฟล์ Excel (${formatMoney(debtors.length)} รายการ) สำเร็จ`, 'success');
+        } catch (err) {
+            console.error('Export Debtors Excel Error:', err);
+            Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถส่งออกไฟล์ Excel ได้: ' + err.message, 'error');
+        }
+    }, 150);
+}
+
+function exportDebtorsPDF() {
+    const ctx = getOfficialDebtorReportContext();
+    const { debtors, meta } = ctx;
+
+    if (!debtors || debtors.length === 0) {
+        Swal.fire('ไม่มีข้อมูลลูกหนี้ค้างชำระ', 'ไม่พบรายการลูกหนี้ค้างชำระตามเงื่อนไขตัวกรองที่เลือก', 'warning');
+        return;
+    }
+
+    Swal.fire({
+        title: 'กำลังจัดเตรียมรายงานราชการ (PDF)...',
+        text: `กำลังสร้างตารางข้อมูล ${formatMoney(debtors.length)} รายการ`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    setTimeout(() => {
+        try {
+            const count12 = debtors.filter(d => d.unpaid_count <= 2).length;
+            const count36 = debtors.filter(d => d.unpaid_count >= 3 && d.unpaid_count <= 6).length;
+            const count6plus = debtors.filter(d => d.unpaid_count > 6).length;
+            const sumMonths = debtors.reduce((s, d) => s + (Number(d.unpaid_count) || 0), 0);
+            const sumDebt = debtors.reduce((s, d) => s + (Number(d.total_debt) || 0), 0);
+            const bahtText = numberToThaiBahtTextDebtor(sumDebt);
+
+            const rowsChunks = [];
+            for (let i = 0; i < debtors.length; i++) {
+                const d = debtors[i];
+                const feeNum = Number(d.fee) || 0;
+                const countNum = Number(d.unpaid_count) || 0;
+                const debtNum = Number(d.total_debt) || 0;
+                const levelText = getDebtBadgeLabel(countNum);
+                const levelClass = countNum <= 2 ? 'lvl-low' : (countNum <= 6 ? 'lvl-mid' : 'lvl-high');
+                const monthsText = Array.isArray(d.unpaid_months) ? d.unpaid_months.join(', ') : '-';
+                const custName = (d.name && d.name !== '-') ? d.name : '-';
+
+                rowsChunks.push(
+                    `<tr>` +
+                    `<td class="tc">${i + 1}</td>` +
+                    `<td class="tc">${d.id || '-'}</td>` +
+                    `<td class="tc fw-bold">${d.house_no || '-'}</td>` +
+                    `<td class="tc">${d.moo || '-'}</td>` +
+                    `<td>${custName}${d.note ? `<div class="note-sub">${d.note}</div>` : ''}</td>` +
+                    `<td class="tc">${d.type || 'บ้านทั่วไป'}</td>` +
+                    `<td class="tr">${formatMoney(feeNum)}</td>` +
+                    `<td class="tc fw-bold">${countNum}</td>` +
+                    `<td class="months-col">${monthsText}</td>` +
+                    `<td class="tr fw-bold debt-col">${formatMoneyDecimal(debtNum)}</td>` +
+                    `<td class="tc">${d.last_paid || '-'}</td>` +
+                    `<td class="tc"><span class="lvl-pill ${levelClass}">${levelText}</span></td>` +
+                    `</tr>`
+                );
+            }
+
+            const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>บัญชีรายชื่อลูกหนี้ค้างชำระค่าธรรมเนียมขยะมูลฝอย ปีงบประมาณ ${meta.fiscalYear}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Sarabun', sans-serif;
+            color: #111827;
+            background: #e2e8f0;
+            font-size: 10.5pt;
+            line-height: 1.38;
+        }
+        .print-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background: #0f172a;
+            color: #fff;
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .print-toolbar .btn-act {
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-family: 'Sarabun', sans-serif;
+            font-size: 10.5pt;
+            font-weight: 700;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        .btn-print-now { background: #16a34a; color: #fff; }
+        .btn-print-now:hover { background: #15803d; }
+        .btn-close-now { background: #dc2626; color: #fff; }
+        .btn-close-now:hover { background: #b91c1c; }
+
+        .report-container {
+            max-width: 297mm;
+            margin: 15px auto;
+            background: #fff;
+            padding: 12mm 14mm;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        }
+
+        /* ส่วนหัวกระดาษราชการ */
+        .gov-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #1e293b;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+        }
+        .gov-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .gov-logo {
+            width: 58px;
+            height: 58px;
+            object-fit: contain;
+        }
+        .gov-titles h1 {
+            font-size: 14.5pt;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 2px;
+        }
+        .gov-titles h2 {
+            font-size: 12pt;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin-bottom: 2px;
+        }
+        .gov-titles p {
+            font-size: 9.5pt;
+            color: #475569;
+        }
+        .gov-meta-box {
+            text-align: right;
+            font-size: 9.5pt;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            padding: 6px 12px;
+            border-radius: 6px;
+            min-width: 235px;
+        }
+        .gov-meta-box div { margin-bottom: 2px; }
+
+        /* แถบเงื่อนไขตัวกรองและสรุปสถิติ */
+        .filter-summary-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 7px 12px;
+            margin-bottom: 10px;
+            font-size: 9.5pt;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .kpi-box {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 6px 10px;
+            background: #fff;
+        }
+        .kpi-box .k-lbl { font-size: 8.5pt; color: #64748b; font-weight: 600; }
+        .kpi-box .k-val { font-size: 12pt; font-weight: 700; color: #0f172a; margin-top: 1px; }
+        .kpi-box .k-sub { font-size: 8pt; color: #475569; }
+        .kpi-box.danger { border-left: 4px solid #dc2626; background: #fef2f2; }
+        .kpi-box.danger .k-val { color: #b91c1c; }
+        .kpi-box.primary { border-left: 4px solid #1d4ed8; }
+        .kpi-box.success { border-left: 4px solid #16a34a; }
+
+        /* ตารางข้อมูลราชการ */
+        table.gov-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+        }
+        table.gov-table thead {
+            display: table-header-group;
+        }
+        table.gov-table tfoot {
+            display: table-row-group;
+        }
+        table.gov-table th, table.gov-table td {
+            border: 1px solid #334155;
+            padding: 4px 6px;
+            vertical-align: middle;
+        }
+        table.gov-table thead th {
+            background-color: #1e293b !important;
+            color: #ffffff !important;
+            font-weight: 700;
+            text-align: center;
+            font-size: 9pt;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        table.gov-table tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        table.gov-table tr {
+            page-break-inside: avoid;
+        }
+        .tc { text-align: center; }
+        .tr { text-align: right; }
+        .fw-bold { font-weight: 700; }
+        .debt-col { color: #b91c1c; }
+        .months-col { font-size: 8pt; color: #334155; line-height: 1.25; }
+        .note-sub { font-size: 7.5pt; color: #64748b; }
+
+        .lvl-pill {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 7.5pt;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+        .lvl-low { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+        .lvl-mid { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+        .lvl-high { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+        .summary-footer-row td {
+            background-color: #f1f5f9 !important;
+            font-weight: 700;
+            font-size: 9.5pt;
+            border-top: 2px solid #0f172a;
+            border-bottom: 2px solid #0f172a;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        /* ส่วนลงนามรับรองรายงานราชการ */
+        .signature-section {
+            margin-top: 22px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            page-break-inside: avoid;
+            text-align: center;
+            font-size: 9.5pt;
+        }
+        .sig-block {
+            padding: 8px 10px;
+        }
+        .sig-line {
+            margin: 26px 0 4px;
+        }
+        .sig-role {
+            color: #475569;
+            font-size: 9pt;
+            margin-top: 2px;
+        }
+        .doc-footer-note {
+            margin-top: 14px;
+            padding-top: 6px;
+            border-top: 1px dashed #94a3b8;
+            display: flex;
+            justify-content: space-between;
+            font-size: 8pt;
+            color: #64748b;
+        }
+
+        @media print {
+            @page {
+                size: A4 landscape;
+                margin: 8mm 10mm;
+            }
+            body {
+                background: #fff;
+            }
+            .no-print, .print-toolbar {
+                display: none !important;
+            }
+            .report-container {
+                max-width: 100%;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-toolbar no-print">
+        <div>
+            <strong>📄 รายงานลูกหนี้ค้างชำระค่าธรรมเนียมขยะมูลฝอย (แบบรายงานราชการ A4 แนวนอน)</strong>
+            <span style="margin-left: 12px; font-size: 9.5pt; opacity: 0.85;">
+                ปีงบประมาณ ${meta.fiscalYear} • ${ctx.mooLabel} • ${meta.rangeDesc} • จำนวน ${formatMoney(debtors.length)} ราย
+            </span>
+        </div>
+        <div>
+            <button class="btn-act btn-print-now" onclick="window.print()">🖨️ สั่งพิมพ์ / บันทึกเป็น PDF</button>
+            <button class="btn-act btn-close-now" onclick="window.close()">✖ ปิดหน้าต่าง</button>
+        </div>
+    </div>
+
+    <div class="report-container">
+        <div class="gov-header">
+            <div class="gov-brand">
+                <img src="${ctx.logoUrl}" class="gov-logo" alt="ตราหน่วยงาน" onerror="this.src='${ctx.defaultGaruda}'">
+                <div class="gov-titles">
+                    <h1>บัญชีรายชื่อลูกหนี้ค้างชำระค่าธรรมเนียมจัดการสิ่งปฏิกูลและมูลฝอย</h1>
+                    <h2>${ctx.orgName} อำเภอ${ctx.district} จังหวัด${ctx.province}</h2>
+                    <p>${ctx.orgAddress ? ctx.orgAddress : `ตำบล${ctx.subdistrict} อำเภอ${ctx.district} จังหวัด${ctx.province}`} ${ctx.orgPhone ? `• โทรศัพท์ ${ctx.orgPhone}` : ''}</p>
+                </div>
+            </div>
+            <div class="gov-meta-box">
+                <div><strong>ปีงบประมาณ:</strong> พ.ศ. ${meta.fiscalYear}</div>
+                <div><strong>วันที่พิมพ์รายงาน:</strong> ${ctx.printDateThai}</div>
+                <div><strong>เวลาที่พิมพ์:</strong> ${ctx.printTimeThai}</div>
+                <div><strong>ส่วนราชการ:</strong> กองคลัง / งานจัดเก็บรายได้</div>
+            </div>
+        </div>
+
+        <div class="filter-summary-bar">
+            <div>
+                <strong>เงื่อนไขการออกรายงาน (ตามตัวกรอง):</strong>
+                ช่วงเดือน <b>${meta.rangeDesc}</b> &nbsp;|&nbsp;
+                พื้นที่ <b>${ctx.mooLabel}</b> &nbsp;|&nbsp;
+                ระดับการค้าง <b>${ctx.levelLabel}</b>
+                ${meta.searchQuery ? `&nbsp;|&nbsp; คำค้นหา: <b>"${meta.searchQuery}"</b>` : ''}
+            </div>
+            <div>
+                <strong>รวมลูกหนี้ตามตัวกรอง:</strong> <b style="color:#b91c1c;">${formatMoney(debtors.length)} ราย</b>
+            </div>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-box primary">
+                <div class="k-lbl">ครัวเรือนในเงื่อนไขทั้งหมด</div>
+                <div class="k-val">${formatMoney(meta.totalActiveCustomers)} ราย</div>
+                <div class="k-sub">ชำระครบแล้ว ${formatMoney(meta.paidCompleteCount)} ราย</div>
+            </div>
+            <div class="kpi-box">
+                <div class="k-lbl">ประมาณการรายได้ (${meta.monthCount} เดือน)</div>
+                <div class="k-val">฿${formatMoneyDecimal(meta.estRevenueRange)}</div>
+                <div class="k-sub">รับชำระแล้ว ฿${formatMoneyDecimal(meta.paidAmountInRange)}</div>
+            </div>
+            <div class="kpi-box">
+                <div class="k-lbl">แยกตามระดับการค้างชำระ</div>
+                <div class="k-val" style="font-size:10pt;">1-2 ด.: ${formatMoney(count12)} | 3-6 ด.: ${formatMoney(count36)}</div>
+                <div class="k-sub" style="color:#b91c1c;font-weight:700;">ค้างเกิน 6 เดือน: ${formatMoney(count6plus)} ราย</div>
+            </div>
+            <div class="kpi-box danger">
+                <div class="k-lbl">จำนวนลูกหนี้ค้างชำระ</div>
+                <div class="k-val">${formatMoney(debtors.length)} ราย</div>
+                <div class="k-sub">รวมจำนวน ${formatMoney(sumMonths)} เดือนที่ค้าง</div>
+            </div>
+            <div class="kpi-box danger">
+                <div class="k-lbl">ยอดเงินค้างชำระรวมทั้งสิ้น</div>
+                <div class="k-val">฿${formatMoneyDecimal(sumDebt)}</div>
+                <div class="k-sub">${bahtText}</div>
+            </div>
+        </div>
+
+        <table class="gov-table">
+            <thead>
+                <tr>
+                    <th style="width: 4%;">ลำดับ</th>
+                    <th style="width: 7%;">รหัสลูกค้า</th>
+                    <th style="width: 6%;">บ้านเลขที่</th>
+                    <th style="width: 4%;">หมู่ที่</th>
+                    <th style="width: 17%;">ชื่อ - นามสกุล (เจ้าบ้าน/ผู้ชำระ)</th>
+                    <th style="width: 8%;">ประเภท</th>
+                    <th style="width: 6%;">อัตรา/ด.</th>
+                    <th style="width: 5%;">ค้าง (ด.)</th>
+                    <th style="width: 22%;">เดือนที่ค้างชำระ</th>
+                    <th style="width: 8%;">ยอดค้าง (บาท)</th>
+                    <th style="width: 6%;">ชำระล่าสุด</th>
+                    <th style="width: 7%;">ระดับ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsChunks.join('')}
+            </tbody>
+            <tfoot>
+                <tr class="summary-footer-row">
+                    <td colspan="7" class="tr">รวมยอดค้างชำระทั้งสิ้น (${formatMoney(debtors.length)} ราย) — ตัวอักษร: (${bahtText})</td>
+                    <td class="tc">${formatMoney(sumMonths)}</td>
+                    <td class="tc">เดือน</td>
+                    <td class="tr debt-col">฿${formatMoneyDecimal(sumDebt)}</td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="signature-section">
+            <div class="sig-block">
+                <div>ขอรับรองว่าข้อมูลถูกต้องตามทะเบียนคุมลูกหนี้</div>
+                <div class="sig-line">ลงชื่อ ............................................................ ผู้จัดทำ/ตรวจสอบ</div>
+                <div>( ${ctx.reporterName} )</div>
+                <div class="sig-role">${ctx.reporterPosition}</div>
+                <div class="sig-role">วันที่ ......... / ......................... / .............</div>
+            </div>
+            <div class="sig-block">
+                <div>ได้ตรวจสอบความถูกต้องแล้ว</div>
+                <div class="sig-line">ลงชื่อ ............................................................ หัวหน้าฝ่ายพัฒนารายได้</div>
+                <div>( ............................................................ )</div>
+                <div class="sig-role">หัวหน้าฝ่ายพัฒนารายได้ กองคลัง</div>
+                <div class="sig-role">วันที่ ......... / ......................... / .............</div>
+            </div>
+            <div class="sig-block">
+                <div>ทราบ / อนุมัติ</div>
+                <div class="sig-line">ลงชื่อ ............................................................ ผู้อำนวยการกองคลัง</div>
+                <div>( ............................................................ )</div>
+                <div class="sig-role">ผู้อำนวยการกองคลัง ${ctx.orgName}</div>
+                <div class="sig-role">วันที่ ......... / ......................... / .............</div>
+            </div>
+        </div>
+
+        <div class="doc-footer-note">
+            <div>เอกสารราชการออกโดยระบบบริหารจัดการค่าธรรมเนียมขยะมูลฝอย (GOOD GOV) — ${ctx.orgName}</div>
+            <div>พิมพ์เมื่อ: ${ctx.printDateThai} เวลา ${ctx.printTimeThai}</div>
+        </div>
+    </div>
+
+    <script>
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        });
+    <\/script>
+</body>
+</html>`;
+
+            Swal.close();
+            const win = window.open('', '_blank', 'width=1200,height=850');
+            if (!win) {
+                Swal.fire('แจ้งเตือน', 'เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาตป๊อปอัป (Pop-up) สำหรับเว็บไซต์นี้', 'warning');
+                return;
+            }
+            win.document.write(html);
+            win.document.close();
+        } catch (err) {
+            console.error('Export Debtors PDF Error:', err);
+            Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถสร้างรายงาน PDF ได้: ' + err.message, 'error');
+        }
+    }, 150);
 }
 </script>
 <!-- LINE Notification Modal -->

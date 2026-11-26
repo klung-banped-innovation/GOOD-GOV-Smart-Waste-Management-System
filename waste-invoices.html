@@ -64,9 +64,6 @@
                 <button class="btn btn-sm btn-success fw-semibold px-3 shadow-sm" onclick="printFilteredInvoices()">
                     <i class="fa-solid fa-print me-1"></i>ออกรายงานใบแจ้งหนี้ตามตัวกรอง (<span id="btnPrintCount">0</span>)
                 </button>
-                <button class="btn btn-sm btn-primary fw-semibold" onclick="openAddModal()">
-                    <i class="fa-solid fa-plus me-1"></i>เพิ่มลูกค้า
-                </button>
                 <button class="btn btn-sm btn-outline-success" onclick="exportFilteredInvoicesExcel()">
                     <i class="fa-solid fa-file-excel me-1"></i>Export
                 </button>
@@ -322,7 +319,7 @@
 <script src="assets/js/supabase-client.js"></script>
 <script src="assets/js/app.js?v=20261113"></script>
 <script src="assets/js/waste.js"></script>
-<script src="assets/js/waste-invoice.js?v=20261113_4"></script>
+<script src="assets/js/waste-invoice.js?v=20261125_2"></script>
 <script src="assets/js/responsive.js"></script>
 <script>
 let currentPage = 1;
@@ -701,12 +698,12 @@ function renderTable() {
             </td>
             <td>${typeBadge(c.type)}</td>
             <td class="text-end">
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text px-1">฿</span>
-                    <input type="number" class="form-control form-control-sm text-end fw-semibold px-1"
+                <div class="input-group input-group-sm" title="แก้ไขค่าธรรมเนียมได้ที่เมนู ทะเบียนลูกค้า เท่านั้น">
+                    <span class="input-group-text px-1 bg-light text-muted">฿</span>
+                    <input type="number" class="form-control form-control-sm text-end fw-semibold px-1 bg-light text-secondary"
                            value="${c.fee || 0}"
-                           onchange="onInlineFeeChange('${c.id}', this.value)"
-                           title="แก้ไขค่าธรรมเนียม/เดือน">
+                           disabled readonly
+                           style="cursor: not-allowed;">
                 </div>
             </td>
             <td class="text-end">
@@ -714,7 +711,10 @@ function renderTable() {
                 <div class="text-xs ${isPaid ? 'text-success fw-bold' : 'text-muted'} text-truncate" style="max-width: 160px;" title="${unpaidMonthsText}">${unpaidMonthsText}</div>
             </td>
             <td>
-                <select class="form-select form-select-sm text-xs ${c.status === 'active' ? 'text-success fw-bold' : c.status === 'exempt' ? 'text-warning fw-bold' : 'text-danger'}" style="width: 115px;" onchange="updateCustomerStatus('${c.id}', this.value)">
+                <select class="form-select form-select-sm text-xs bg-light ${c.status === 'active' ? 'text-success fw-bold' : c.status === 'exempt' ? 'text-warning fw-bold' : 'text-danger'}"
+                        style="width: 115px; cursor: not-allowed;"
+                        disabled
+                        title="แก้ไขสถานะได้ที่เมนู ทะเบียนลูกค้า เท่านั้น">
                     <option value="active" ${c.status === 'active' ? 'selected' : ''}>ใช้งาน</option>
                     <option value="cancelled" ${c.status === 'cancelled' ? 'selected' : ''}>ยกเลิก</option>
                     <option value="exempt" ${c.status === 'exempt' ? 'selected' : ''}>ยกเว้น</option>
@@ -727,9 +727,6 @@ function renderTable() {
                     </button>
                     <button class="btn btn-xs btn-outline-info" onclick="previewSingleInvoice('${c.id}')" title="ดูตัวอย่างใบแจ้งหนี้">
                         <i class="fa-solid fa-eye"></i>
-                    </button>
-                    <button class="btn btn-xs btn-outline-primary" onclick="editCustomer('${c.id}')" title="แก้ไขข้อมูลลูกค้า">
-                        <i class="fa-solid fa-pen"></i>
                     </button>
                 </div>
             </td>
@@ -761,33 +758,12 @@ function goPage(p) {
     renderTable();
 }
 
-async function onInlineFeeChange(customerId, newFeeVal) {
-    const customers = getWasteCustomers();
-    const c = customers.find(x => x.id === customerId);
-    if (!c) return;
-    const feeNum = parseInt(newFeeVal, 10) || 0;
-    c.fee = feeNum;
-    await saveWasteCustomerDB(c);
-    showToast(`อัปเดตค่าธรรมเนียมบ้านเลขที่ ${c.house_no} เป็น ฿${feeNum}/เดือน`, 'success');
-    renderTable();
+async function onInlineFeeChange() {
+    Swal.fire('ไม่สามารถแก้ไขในหน้านี้ได้', 'กรุณาแก้ไขค่าธรรมเนียมผ่านเมนู "ทะเบียนลูกค้า" เท่านั้น', 'info');
 }
 
-async function updateCustomerStatus(id, newStatus) {
-    const customers = getWasteCustomers();
-    const c = customers.find(x => x.id === id);
-    if (!c) return;
-
-    Swal.fire({title: 'กำลังอัปเดต...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
-    c.status = newStatus;
-
-    let statusLabel = 'ใช้งาน';
-    if (newStatus === 'cancelled') statusLabel = 'ยกเลิก';
-    if (newStatus === 'exempt') statusLabel = 'ยกเว้น/ไม่ได้เก็บ';
-
-    await saveWasteCustomerDB(c);
-    Swal.close();
-    showToast(`เปลี่ยนสถานะเป็น ${statusLabel} แล้ว`, 'success');
-    renderTable();
+async function updateCustomerStatus() {
+    Swal.fire('ไม่สามารถแก้ไขในหน้านี้ได้', 'กรุณาแก้ไขสถานะลูกค้าผ่านเมนู "ทะเบียนลูกค้า" เท่านั้น', 'info');
 }
 
 // ==========================================

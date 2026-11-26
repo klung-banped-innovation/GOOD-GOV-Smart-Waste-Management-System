@@ -418,6 +418,22 @@
                             <i class="fa-solid fa-check-circle me-1"></i> ยืนยันการเชื่อมโยง
                         </button>
                     </div>
+
+                    <!-- Registration Section & Status inside Link Modal -->
+                    <div class="mt-4 pt-3 border-top" id="linkModalRegisterSection">
+                        <!-- Live Status of Registration Request (Pending / Approved / Rejected) -->
+                        <div id="linkModalRegStatusArea" class="mb-3" style="display: none;"></div>
+
+                        <div class="p-3 rounded-3" style="background: #eff6ff; border: 1px dashed #93c5fd;">
+                            <div class="text-sm text-dark mb-2" style="line-height: 1.5;">
+                                <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                                <strong>หมายเหตุ:</strong> กรณียังไม่มีฐานข้อมูลการชำระค่าธรรมเนียมขยะกับเทศบาลเมืองบ้านเป็ด สามารถกดปุ่มด้านล่างเพื่อลงทะเบียนขอชำระค่าธรรมเนียมขยะ
+                            </div>
+                            <button type="button" class="btn btn-outline-primary w-100 fw-bold rounded-pill shadow-sm bg-white" onclick="openRegisterFromLinkModal()" id="btnOpenRegFromLink">
+                                <i class="fa-solid fa-file-pen me-2"></i>ลงทะเบียนค่าธรรมเนียมขยะ (ขอชำระค่าธรรมเนียมขยะ)
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -577,12 +593,24 @@
                     const mergedWaste = [...(dWaste1 || []), ...dWaste2];
                     const uniqueWaste = Array.from(new Map(mergedWaste.map(item => [item.id, item])).values());
                     
-                    uniqueWaste.forEach(r => allRequests.push({ type: 'waste', date: r.payment_datetime, data: r }));
+                    if (!window.allLoadedWasteRequests) window.allLoadedWasteRequests = [];
+                    uniqueWaste.forEach(r => {
+                        allRequests.push({ type: 'waste', date: r.payment_datetime, data: r });
+                        const exIdx = window.allLoadedWasteRequests.findIndex(ex => String(ex.id) === String(r.id));
+                        if (exIdx >= 0) window.allLoadedWasteRequests[exIdx] = r;
+                        else window.allLoadedWasteRequests.push(r);
+                    });
                 } else {
                     // Local fallback
                     let wpts = JSON.parse(localStorage.getItem('garbage_payment_transactions') || '[]');
                     if (userName) wpts = wpts.filter(r => r.payer_name === userName);
-                    wpts.forEach(r => allRequests.push({ type: 'waste', date: r.payment_datetime, data: r }));
+                    if (!window.allLoadedWasteRequests) window.allLoadedWasteRequests = [];
+                    wpts.forEach(r => {
+                        allRequests.push({ type: 'waste', date: r.payment_datetime, data: r });
+                        const exIdx = window.allLoadedWasteRequests.findIndex(ex => String(ex.id) === String(r.id));
+                        if (exIdx >= 0) window.allLoadedWasteRequests[exIdx] = r;
+                        else window.allLoadedWasteRequests.push(r);
+                    });
                 }
             } catch(err) { console.warn("Fetch failed", err); }
 
@@ -1014,122 +1042,456 @@
             });
         }
 
-        function viewCitizenReceipt(id) {
+        function formatDriveReceiptPreviewUrl(rawUrl) {
+            const clean = String(rawUrl || '').trim();
+            if (!clean) return { primaryUrl: '', fallbackUrl: '', rawUrl: '' };
+            let fileId = '';
+            const matchD = clean.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || clean.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            const matchId = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (matchD && matchD[1]) fileId = matchD[1];
+            else if (matchId && matchId[1]) fileId = matchId[1];
+            if (fileId) {
+                return {
+                    primaryUrl: `https://lh3.googleusercontent.com/d/${fileId}=w1200`,
+                    fallbackUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200`,
+                    rawUrl: clean
+                };
+            }
+            return { primaryUrl: clean, fallbackUrl: '', rawUrl: clean };
+        }
+
+        function formatOfficialThaiDate(dateStr) {
+            if (!dateStr) return '-';
+            const thMonths = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+            const parts = String(dateStr).split('T')[0].split('-');
+            if (parts.length === 3 && !isNaN(parseInt(parts[0], 10))) {
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                const thaiYear = y > 2400 ? y : y + 543;
+                if (thMonths[m]) return `${d} ${thMonths[m]} ${thaiYear}`;
+            }
+            const dObj = new Date(dateStr);
+            if (!isNaN(dObj.getTime())) {
+                return `${dObj.getDate()} ${thMonths[dObj.getMonth() + 1]} ${dObj.getFullYear() + 543}`;
+            }
+            return dateStr;
+        }
+
+        function formatReceiptMonthsGrouped(monthsPaid, defaultFiscalYear) {
+            let pm = monthsPaid;
+            if (typeof pm === 'string') {
+                try { pm = JSON.parse(pm); } catch (e) { pm = pm.split(','); }
+            }
+            if (!Array.isArray(pm)) pm = pm ? [String(pm)] : [];
+            pm = pm.map(m => m ? String(m).trim() : '').filter(Boolean);
+            if (pm.length === 0) return '-';
+
+            const groups = {};
+            pm.forEach(rawItem => {
+                let label = rawItem;
+                const keyIdx = MONTH_KEYS.indexOf(rawItem.toLowerCase());
+                if (keyIdx >= 0) {
+                    const fyNum = parseInt(defaultFiscalYear, 10) || (new Date().getMonth() >= 9 ? new Date().getFullYear() + 544 : new Date().getFullYear() + 543);
+                    const calYear = ['oct', 'nov', 'dec'].includes(rawItem.toLowerCase()) ? fyNum - 1 : fyNum;
+                    label = `${THAI_MONTHS_SHORT[keyIdx]} ${String(calYear).slice(-2)}`;
+                }
+
+                const parts = label.split(/\s+/);
+                if (parts.length >= 2 && !isNaN(parseInt(parts[1], 10))) {
+                    const mName = parts[0];
+                    const ySuffix = parseInt(parts[1], 10);
+                    const calYear = ySuffix < 100 ? 2500 + ySuffix : ySuffix;
+                    let fy = calYear;
+                    if (['ต.ค.', 'พ.ย.', 'ธ.ค.'].includes(mName)) fy += 1;
+                    if (!groups[fy]) groups[fy] = [];
+                    groups[fy].push(label);
+                } else {
+                    const fyKey = defaultFiscalYear ? String(defaultFiscalYear) : 'อื่น ๆ';
+                    if (!groups[fyKey]) groups[fyKey] = [];
+                    groups[fyKey].push(label);
+                }
+            });
+
+            const fyKeys = Object.keys(groups).sort();
+            return fyKeys.map(fy => {
+                const title = fy !== 'อื่น ๆ' ? `ปีงบประมาณ ${fy}` : fy;
+                return `<div style="margin-bottom:2px;"><strong style="color:#1a56db;font-size:0.95em;">${title}</strong><br>${groups[fy].join(', ')}</div>`;
+            }).join('');
+        }
+
+        async function findOfficialWastePaymentRecord(tx) {
+            if (!tx) return null;
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    let candidates = [];
+
+                    // 1. ค้นหาจาก customer_id (citizen_id)
+                    if (tx.citizen_id) {
+                        const { data: byCid } = await supabaseClient
+                            .from('waste_payments')
+                            .select('*')
+                            .eq('customer_id', String(tx.citizen_id))
+                            .neq('status', 'cancelled')
+                            .order('created_at', { ascending: false })
+                            .limit(30);
+                        if (byCid && byCid.length > 0) candidates.push(...byCid);
+                    }
+
+                    // 2. ค้นหาจากชื่อผู้ชำระ หรือ บ้านเลขที่
+                    if (candidates.length === 0 && (tx.payer_name || tx.house_no)) {
+                        let q = supabaseClient
+                            .from('waste_payments')
+                            .select('*')
+                            .neq('status', 'cancelled')
+                            .order('created_at', { ascending: false })
+                            .limit(30);
+
+                        const cleanHouse = String(tx.house_no || '').split(' ')[0].trim();
+                        if (tx.payer_name && cleanHouse) {
+                            q = q.or(`customer_name.ilike.%${tx.payer_name.trim()}%,house_no.ilike.%${cleanHouse}%`);
+                        } else if (tx.payer_name) {
+                            q = q.ilike('customer_name', `%${tx.payer_name.trim()}%`);
+                        } else if (cleanHouse) {
+                            q = q.ilike('house_no', `%${cleanHouse}%`);
+                        }
+                        const { data: byNameOrHouse } = await q;
+                        if (byNameOrHouse && byNameOrHouse.length > 0) candidates.push(...byNameOrHouse);
+                    }
+
+                    if (candidates.length > 0) {
+                        // กรองตัวซ้ำ
+                        const uniqueCandidates = Array.from(new Map(candidates.map(item => [item.id, item])).values());
+                        const txAmt = Number(tx.amount || 0);
+                        const txTime = tx.payment_datetime ? new Date(tx.payment_datetime).getTime() : 0;
+
+                        let txMonthCount = 0;
+                        if (Array.isArray(tx.paid_months)) txMonthCount = tx.paid_months.length;
+                        else if (tx.paid_months) {
+                            try {
+                                const parsed = JSON.parse(tx.paid_months);
+                                txMonthCount = Array.isArray(parsed) ? parsed.length : String(tx.paid_months).split(',').length;
+                            } catch (e) {
+                                txMonthCount = String(tx.paid_months).split(',').length;
+                            }
+                        }
+
+                        // ให้คะแนนความตรงกันเพื่อดึงใบเสร็จจริงของรายการนั้น
+                        let bestMatch = null;
+                        let bestScore = -999999;
+
+                        uniqueCandidates.forEach(p => {
+                            let score = 0;
+                            // ถ้าระบุ receipt_url ตรงกัน ให้คะแนนสูงสุดทันที
+                            if (tx.receipt_url && p.receipt_url && tx.receipt_url === p.receipt_url) score += 1000;
+                            if (tx.receipt_no && p.receipt_no && tx.receipt_no === p.receipt_no) score += 1000;
+                            if (tx.citizen_id && String(p.customer_id) === String(tx.citizen_id)) score += 100;
+                            if (Number(p.amount || 0) === txAmt) score += 80;
+                            if (tx.fiscal_year && p.fiscal_year && String(p.fiscal_year) === String(tx.fiscal_year)) score += 30;
+                            if (p.source === 'citizen-portal') score += 20;
+
+                            const pMonths = Array.isArray(p.months_paid) ? p.months_paid : (p.months_paid ? String(p.months_paid).split(',') : []);
+                            if (txMonthCount > 0 && pMonths.length === txMonthCount) score += 25;
+
+                            const pDateStr = p.created_at || p.date;
+                            if (txTime && pDateStr) {
+                                const pTime = new Date(pDateStr).getTime();
+                                if (!isNaN(pTime)) {
+                                    const diffHours = Math.abs(pTime - txTime) / (1000 * 60 * 60);
+                                    if (diffHours <= 24) score += 50;
+                                    else if (diffHours <= 72) score += 30;
+                                    else score -= Math.min(40, Math.floor(diffHours / 24));
+                                }
+                            }
+
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestMatch = p;
+                            }
+                        });
+
+                        if (bestMatch) return bestMatch;
+                    }
+                } catch (err) {
+                    console.warn('Error fetching official receipt from waste_payments:', err);
+                }
+            }
+
+            // Fallback ค้นหาจาก localStorage
+            try {
+                const localPayments = JSON.parse(localStorage.getItem('waste_payments') || '[]');
+                const matched = localPayments.find(p =>
+                    p.status !== 'cancelled' &&
+                    ((tx.citizen_id && String(p.customer_id) === String(tx.citizen_id)) ||
+                     (tx.payer_name && p.customer_name === tx.payer_name)) &&
+                    Number(p.amount || 0) === Number(tx.amount || 0)
+                );
+                if (matched) return matched;
+            } catch (e) {}
+
+            return null;
+        }
+
+        async function viewCitizenReceipt(id) {
             console.log("Viewing receipt for ID:", id);
             let t = null;
-            
-            // Search in global cache first
+
+            // 1. ค้นหาจาก cache ในหน้าเว็บ
             if (window.allLoadedWasteRequests) {
-                t = window.allLoadedWasteRequests.find(x => x.id == id);
+                t = window.allLoadedWasteRequests.find(x => String(x.id) === String(id));
             }
-            
-            // Fallback to localStorage if not found in cache
+
+            // 2. ถ้ายังไม่เจอ ดึงจาก Supabase หรือ localStorage
+            if (!t && typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    const { data } = await supabaseClient
+                        .from('garbage_payment_transactions')
+                        .select('*')
+                        .eq('id', id)
+                        .maybeSingle();
+                    if (data) t = data;
+                } catch (e) {}
+            }
             if (!t) {
                 const wpts = JSON.parse(localStorage.getItem('garbage_payment_transactions') || '[]');
-                t = wpts.find(x => x.id == id);
+                t = wpts.find(x => String(x.id) === String(id));
             }
 
             if (!t) {
-                console.warn("Transaction not found for ID:", id);
+                Swal.fire('ไม่พบข้อมูล', 'ไม่พบรายการชำระเงินนี้ในระบบ', 'warning');
                 return;
             }
-            
-            // ถ้ามี URL ใบเสร็จจาก Google Drive ให้แสดงเป็นรูปภาพ
-            if (t.receipt_url) {
-                Swal.fire({
-                    title: '<i class="fa-solid fa-file-invoice text-success me-2"></i>ใบเสร็จรับเงินอย่างเป็นทางการ',
-                    imageUrl: t.receipt_url,
-                    imageWidth: '100%',
-                    imageAlt: 'Official Receipt',
-                    showCloseButton: true,
-                    showCancelButton: true,
-                    confirmButtonText: '<i class="fa-solid fa-download me-1"></i> บันทึกใบเสร็จ',
-                    cancelButtonText: 'ปิด',
-                    confirmButtonColor: '#057a55',
-                    footer: '<div class="text-xs text-muted">สามารถบันทึกรูปภาพเก็บไว้เป็นหลักฐานได้</div>'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        const link = document.createElement('a');
-                        link.href = t.receipt_url;
-                        link.download = `Receipt_${t.receipt_no || id}.jpg`;
-                        link.target = '_blank';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    }
-                });
-                return;
-            }
-            
-            const p = {
-                receipt_no: t.receipt_no || 'RE' + String(Date.now()).substring(7),
-                date: new Date(t.payment_datetime).toLocaleDateString('th-TH'),
-                customer_name: t.payer_name,
-                house_no: t.house_no,
-                months_paid: getThaiMonths(t.paid_months),
-                method: t.payment_method,
-                amount: t.amount
-            };
-            
+
             Swal.fire({
-                title: '<i class="fa-solid fa-file-invoice text-success me-2"></i>ใบเสร็จรับเงิน',
-                html: `
-                <div class="text-start" style="font-size:0.95rem;">
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span class="text-muted">เลขที่รายการ:</span> <strong class="text-dark">${p.receipt_no}</strong>
+                title: 'กำลังดึงข้อมูลใบเสร็จ...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            // 3. ดึงข้อมูลหน่วยงานจาก waste_settings และข้อมูลใบเสร็จจริงจาก waste_payments
+            let settings = {};
+            try {
+                settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
+            } catch (e) {}
+
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    const { data: sData } = await supabaseClient.from('waste_settings').select('*').limit(1).maybeSingle();
+                    if (sData) {
+                        settings = sData;
+                        localStorage.setItem('waste_settings', JSON.stringify(sData));
+                    }
+                } catch (e) {}
+            }
+
+            const officialPayment = await findOfficialWastePaymentRecord(t);
+
+            // ผสานข้อมูลใบเสร็จจริงจากระบบ (waste_payments) เข้ากับรายการชำระ
+            const receiptNo = (officialPayment && officialPayment.receipt_no) || t.receipt_no || ('REC-' + String(t.id).substring(0, 8).toUpperCase());
+            const payDateRaw = (officialPayment && officialPayment.date) || t.payment_datetime;
+            const dateFormatted = formatOfficialThaiDate(payDateRaw);
+            const customerName = (officialPayment && officialPayment.customer_name) || t.payer_name || '-';
+            const houseNo = (officialPayment && officialPayment.house_no) || (t.house_no ? `${t.house_no}${t.moo ? ' ม.' + t.moo : ''}` : '-');
+            const amountVal = Number((officialPayment && officialPayment.amount) || t.amount || 0);
+            const amountFormatted = amountVal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const methodText = (officialPayment && officialPayment.method) || t.payment_method || '-';
+            const staffName = (officialPayment && officialPayment.staff) || 'เจ้าหน้าที่รับชำระ';
+            const fiscalYear = (officialPayment && officialPayment.fiscal_year) || t.fiscal_year || '';
+            const monthsSource = (officialPayment && officialPayment.months_paid && officialPayment.months_paid.length > 0)
+                ? officialPayment.months_paid
+                : t.paid_months;
+            const monthsHTML = formatReceiptMonthsGrouped(monthsSource, fiscalYear);
+            const noteText = (officialPayment && (officialPayment.note || (officialPayment.status === 'completed' ? officialPayment.reject_reason : ''))) || '';
+            const officialReceiptUrl = (officialPayment && officialPayment.receipt_url) || t.receipt_url || '';
+
+            // 4. ดึงลายเซ็นเจ้าหน้าที่จากตาราง waste_staff (เหมือนใบเสร็จจริงในระบบหลังบ้าน)
+            let staffSignatureHTML = '<div style="height:30px;"></div>';
+            if (staffName && typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    const { data: stData } = await supabaseClient
+                        .from('waste_staff')
+                        .select('signature_image_url')
+                        .ilike('name', `%${staffName.trim()}%`)
+                        .limit(1);
+                    if (stData && stData.length > 0 && stData[0].signature_image_url) {
+                        staffSignatureHTML = `<img src="${stData[0].signature_image_url}" style="height:32px;display:block;margin:0 auto 2px;object-fit:contain;" referrerpolicy="no-referrer">`;
+                    }
+                } catch (e) {}
+            }
+
+            const orgName = settings.org_name || 'เทศบาลเมืองบ้านเป็ด';
+            const orgAddress = settings.org_address || '';
+            const orgPhone = settings.org_phone || '';
+            const baseHref = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+            const defaultGaruda = baseHref + 'assets/img/garuda.png';
+            const logoUrl = settings.org_logo || defaultGaruda;
+
+            // สร้างการ์ดใบเสร็จจริงตามรูปแบบมาตรฐานของระบบ (เหมือน buildReceiptHTML ใน waste-receipt.js)
+            const officialReceiptCardHTML = `
+                <div id="citizenOfficialReceiptCard" style="font-family:'Prompt',sans-serif;color:#333;background:#fff;line-height:1.35;border:1px solid #e2e8f0;border-radius:12px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,0.04);text-align:left;">
+                    <div style="text-align:center;margin-bottom:8px;border-bottom:1.5px solid #1a56db;padding-bottom:8px;">
+                        <img src="${logoUrl}" alt="Logo" style="height:46px;margin-bottom:4px;object-fit:contain;" onerror="this.src='${defaultGaruda}'">
+                        <h2 style="margin:0 0 2px 0;color:#1a56db;font-size:15.5px;font-weight:700;line-height:1.25;">สำเนาใบเสร็จรับเงินค่าธรรมเนียมขยะมูลฝอย</h2>
+                        <p style="margin:0;font-size:12px;color:#4b5563;font-weight:600;">${orgName}</p>
+                        <p style="margin:0;font-size:11px;color:#9ca3af;">${orgAddress} ${orgPhone}</p>
                     </div>
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span class="text-muted">วันที่ชำระ:</span> <strong class="text-dark">${p.date}</strong>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0;">
+                        <div style="padding:5px 10px;background:#f8fafc;border-radius:6px;">
+                            <div style="font-size:11px;color:#6b7280;font-weight:500;">เลขที่ใบเสร็จ</div>
+                            <div style="font-size:13.5px;font-weight:700;color:#111827;">${receiptNo}</div>
+                        </div>
+                        <div style="padding:5px 10px;background:#f8fafc;border-radius:6px;">
+                            <div style="font-size:11px;color:#6b7280;font-weight:500;">วันที่</div>
+                            <div style="font-size:13.5px;font-weight:600;color:#111827;">${dateFormatted}</div>
+                        </div>
+                        <div style="padding:5px 10px;background:#f8fafc;border-radius:6px;">
+                            <div style="font-size:11px;color:#6b7280;font-weight:500;">ชื่อผู้ชำระ</div>
+                            <div style="font-size:13.5px;font-weight:600;color:#111827;">${customerName}</div>
+                            ${noteText ? `<div style="font-size:11.5px;color:#4b5563;font-weight:500;margin-top:2px;">หมายเหตุ: ${noteText}</div>` : ''}
+                        </div>
+                        <div style="padding:5px 10px;background:#f8fafc;border-radius:6px;">
+                            <div style="font-size:11px;color:#6b7280;font-weight:500;">บ้านเลขที่</div>
+                            <div style="font-size:13.5px;font-weight:600;color:#111827;">${houseNo}</div>
+                        </div>
+                        <div style="padding:5px 10px;background:#f8fafc;border-radius:6px;">
+                            <div style="font-size:11px;color:#6b7280;font-weight:500;">เดือนที่ชำระ</div>
+                            <div style="font-size:12px;font-weight:600;color:#111827;">${monthsHTML}</div>
+                        </div>
+                        <div style="padding:5px 10px;background:#f8fafc;border-radius:6px;">
+                            <div style="font-size:11px;color:#6b7280;font-weight:500;">ช่องทางชำระ</div>
+                            <div style="font-size:13.5px;font-weight:600;color:#111827;">${methodText}</div>
+                        </div>
                     </div>
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span class="text-muted">ชื่อผู้ชำระ:</span> <strong class="text-dark">${p.customer_name}</strong>
+                    <div style="text-align:right;font-size:17px;font-weight:700;color:#057a55;margin:8px 0;padding:7px 12px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;">
+                        ยอดชำระ: ฿${amountFormatted}
                     </div>
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span class="text-muted">บ้านเลขที่:</span> <strong class="text-dark">${p.house_no}</strong>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+                        <div style="padding:4px 10px;text-align:center;">
+                            <div style="font-size:11px;color:#6b7280;font-weight:500;text-align:left;">เจ้าหน้าที่รับเงิน</div>
+                            ${staffSignatureHTML}
+                            <div style="font-size:11.5px;font-weight:600;color:#111827;">( ${staffName} )<br><span style="font-weight:400;font-size:10px;color:#6b7280;">เจ้าหน้าที่ผู้รับเงิน</span></div>
+                        </div>
+                        <div></div>
                     </div>
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span class="text-muted">เดือนที่ชำระ:</span> <strong class="text-end text-dark">${p.months_paid}</strong>
-                    </div>
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span class="text-muted">ช่องทาง:</span> <strong class="text-dark">${p.method}</strong>
-                    </div>
-                    <div class="d-flex justify-content-between mt-3 bg-light p-2 rounded">
-                        <span class="fs-5 fw-bold text-dark">ยอดชำระ:</span> <strong class="fs-4 text-success">฿${Number(p.amount).toLocaleString('th-TH', {minimumFractionDigits:2})}</strong>
+                    <div style="text-align:center;margin-top:12px;font-size:10.5px;color:#9ca3af;border-top:1px dashed #d1d5db;padding-top:6px;">
+                        เอกสารนี้ออกโดยระบบ GOOD GOV &mdash; ${orgName}
                     </div>
                 </div>
-                `,
+            `;
+
+            const driveImg = formatDriveReceiptPreviewUrl(officialReceiptUrl);
+            const driveImageBannerHTML = driveImg.primaryUrl ? `
+                <div id="driveReceiptImgWrapper" class="mb-3 text-center">
+                    <div class="badge bg-success-subtle text-success mb-2 px-3 py-1 rounded-pill">
+                        <i class="fa-solid fa-file-shield me-1"></i>ไฟล์ภาพใบเสร็จต้นฉบับจากระบบ
+                    </div>
+                    <img src="${driveImg.primaryUrl}"
+                         alt="Official Receipt Image"
+                         referrerpolicy="no-referrer"
+                         style="width:100%;max-height:460px;object-fit:contain;border:1px solid #cbd5e1;border-radius:10px;background:#fff;"
+                         onerror="${driveImg.fallbackUrl ? `if(!this.dataset.triedFallback){this.dataset.triedFallback='1';this.src='${driveImg.fallbackUrl}';}else{document.getElementById('driveReceiptImgWrapper').style.display='none';document.getElementById('fallbackOfficialCardWrapper').style.display='block';}` : `document.getElementById('driveReceiptImgWrapper').style.display='none';document.getElementById('fallbackOfficialCardWrapper').style.display='block';`}">
+                    <div class="mt-2">
+                        <a href="${driveImg.rawUrl}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                            <i class="fa-solid fa-up-right-from-square me-1"></i>เปิดไฟล์ภาพใบเสร็จขนาดเต็ม
+                        </a>
+                    </div>
+                </div>
+                <div id="fallbackOfficialCardWrapper" style="display:none;">
+                    ${officialReceiptCardHTML}
+                </div>
+            ` : officialReceiptCardHTML;
+
+            Swal.close();
+
+            Swal.fire({
+                title: '<span style="font-size:1.15rem;font-weight:700;"><i class="fa-solid fa-file-invoice text-success me-2"></i>ใบเสร็จรับเงินอย่างเป็นทางการ</span>',
+                html: driveImageBannerHTML,
+                width: 680,
                 showCloseButton: true,
                 showCancelButton: true,
-                confirmButtonText: '<i class="fa-solid fa-print me-1"></i> พิมพ์ใบเสร็จ',
+                confirmButtonText: '<i class="fa-solid fa-print me-1"></i> พิมพ์ใบเสร็จรับเงินจริง',
                 cancelButtonText: 'ปิดหน้าต่าง',
                 confirmButtonColor: '#057a55'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    const iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    document.body.appendChild(iframe);
-                    const doc = iframe.contentDocument || iframe.contentWindow.document;
-                    const htmlStart = '<' + 'html' + '><' + 'head' + '><' + 'title' + '>Receipt<' + '/title' + '>';
-                    const bootstrap = '<' + 'link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"' + '>';
-                    const styles = '<' + 'style' + '>body{font-family:Sarabun,sans-serif;padding:30px;}.box{border:1px solid #eee;padding:20px;border-radius:10px;}<' + '/style' + '><' + '/head' + '>';
-                    const bodyStart = '<' + 'body' + '><div class="box text-center"><h2 class="text-success">ใบเสร็จรับเงิน</h2><hr>';
-                    const table = '<table class="table text-start">' +
-                        '<tr><td>เลขที่</td><td>' + p.receipt_no + '</td></tr>' +
-                        '<tr><td>วันที่</td><td>' + p.date + '</td></tr>' +
-                        '<tr><td>ชื่อ</td><td>' + p.customer_name + '</td></tr>' +
-                        '<tr><td>บ้านเลขที่</td><td>' + p.house_no + '</td></tr>' +
-                        '<tr><td>ยอดชำระ</td><td>฿' + Number(p.amount).toLocaleString() + '</td></tr>' +
-                        '</table></div>';
-                    const bodyEnd = '<' + '/body' + '><' + '/html' + '>';
-                    
-                    doc.write(htmlStart + bootstrap + styles + bodyStart + table + bodyEnd);
-                    doc.close();
-                    
-                    setTimeout(() => { 
-                        iframe.contentWindow.focus(); 
-                        iframe.contentWindow.print(); 
-                        setTimeout(() => iframe.remove(), 1000); 
-                    }, 500);
+                    const w = window.open('', '_blank', 'width=820,height=900');
+                    if (!w) {
+                        Swal.fire('แจ้งเตือน', 'กรุณาอนุญาตป๊อปอัป (Pop-up) เพื่อพิมพ์ใบเสร็จรับเงิน', 'warning');
+                        return;
+                    }
+                    const createPrintHalf = (headingTitle) => `
+                        <div class="receipt-half">
+                            <div class="header">
+                                <img src="${logoUrl}" alt="Logo" onerror="this.src='${defaultGaruda}'">
+                                <h2>${headingTitle}</h2>
+                                <p style="margin:0;font-size:12px;color:#6b7280">${orgName}</p>
+                                <p style="margin:0;font-size:11px;color:#9ca3af">${orgAddress} ${orgPhone}</p>
+                            </div>
+                            <div class="info-grid">
+                                <div class="info-item"><div class="info-label">เลขที่ใบเสร็จ</div><div class="info-value">${receiptNo}</div></div>
+                                <div class="info-item"><div class="info-label">วันที่</div><div class="info-value">${dateFormatted}</div></div>
+                                <div class="info-item">
+                                    <div class="info-label">ชื่อผู้ชำระ</div>
+                                    <div class="info-value">${customerName}</div>
+                                    ${noteText ? `<div style="font-size:12px;color:#4b5563;font-weight:500;margin-top:2px;">หมายเหตุ: ${noteText}</div>` : ''}
+                                </div>
+                                <div class="info-item"><div class="info-label">บ้านเลขที่</div><div class="info-value">${houseNo}</div></div>
+                                <div class="info-item"><div class="info-label">เดือนที่ชำระ</div><div class="info-value" style="font-size:12px;">${monthsHTML}</div></div>
+                                <div class="info-item"><div class="info-label">ช่องทางชำระ</div><div class="info-value">${methodText}</div></div>
+                            </div>
+                            <div class="total">ยอดชำระ: ฿${amountFormatted}</div>
+                            <div class="info-grid" style="grid-template-columns: 1fr 1fr;">
+                                <div class="info-item" style="text-align:center;">
+                                    <div class="info-label" style="text-align:left;">เจ้าหน้าที่รับเงิน</div>
+                                    ${staffSignatureHTML}
+                                    <div class="info-value" style="font-size:11px;">( ${staffName} )<br><span style="font-weight:400;font-size:10px;">เจ้าหน้าที่ผู้รับเงิน</span></div>
+                                </div>
+                                <div></div>
+                            </div>
+                            <div class="footer"><p>เอกสารนี้ออกโดยระบบ GOOD GOV &mdash; ${orgName}</p></div>
+                        </div>
+                    `;
+
+                    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>ใบเสร็จรับเงิน ${receiptNo}</title>
+                    <style>@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+                    body{font-family:'Prompt',sans-serif;margin:0;padding:0;color:#333;background:#fff;line-height:1.3;}
+                    .page { width: 210mm; height: 296mm; padding: 10mm 15mm 5mm 15mm; box-sizing: border-box; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; }
+                    .receipt-half { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0; }
+                    .cut-line { border-top: 1px dashed #999; margin: 2mm 0; position: relative; }
+                    .cut-line::after { content: "✂ รอยปรุสำหรับฉีก"; position: absolute; right: 0; top: -8px; background: #fff; padding: 0 10px; font-size: 10px; color: #999; }
+                    .header{text-align:center;margin-bottom:4px;border-bottom:1px solid #1a56db;padding-bottom:6px}
+                    .header img{height:45px;margin-bottom:2px}
+                    h2{margin:0 0 2px 0;color:#1a56db;font-size:16px;line-height:1.2;}
+                    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}
+                    .info-item{padding:4px 10px;background:#f8fafc;border-radius:6px}
+                    .info-label{font-size:11px;color:#6b7280;font-weight:500;margin-bottom:1px;}
+                    .info-value{font-size:14px;font-weight:600}
+                    .total{text-align:right;font-size:18px;font-weight:700;color:#057a55;margin:6px 0;padding:6px 12px;background:#f0fdf4;border-radius:6px}
+                    .footer{text-align:center;margin-top:auto;font-size:11px;color:#9ca3af;border-top:1px dashed #d1d5db;padding-top:6px}
+                    .no-print { display: flex; gap: 10px; justify-content: center; padding: 15px; background: #f3f4f6; margin-bottom: 20px; }
+                    .btn { border: none; padding: 10px 20px; border-radius: 6px; font-family: 'Prompt', sans-serif; font-size: 16px; cursor: pointer; color: #fff; font-weight: 600; }
+                    .btn-primary { background: #1a56db; } .btn-danger { background: #dc2626; }
+                    @media print{
+                        .no-print { display: none !important; }
+                        body { background: none; }
+                        @page { size: A4; margin: 0; }
+                        .page { padding: 10mm 15mm 5mm 15mm; width: 210mm; height: 296mm; page-break-after: avoid; }
+                    }
+                    </style></head><body>
+                    <div class="no-print">
+                        <button class="btn btn-danger" onclick="window.close()">ปิดหน้านี้</button>
+                        <button class="btn btn-primary" onclick="window.print()">พิมพ์ใบเสร็จ</button>
+                    </div>
+                    <div class="page">
+                        ${createPrintHalf('ต้นฉบับ ใบเสร็จรับเงินค่าธรรมเนียมขยะมูลฝอย')}
+                        <div class="cut-line"></div>
+                        ${createPrintHalf('สำเนาใบเสร็จรับเงินค่าธรรมเนียมขยะมูลฝอย')}
+                    </div>
+                    </body></html>`);
+                    w.document.close();
+                    setTimeout(() => w.print(), 800);
                 }
             });
         }
@@ -1191,26 +1553,40 @@
             const modalEl = document.getElementById('registerWasteModal');
             if (modalEl) {
                 modalEl.addEventListener('shown.bs.modal', async function () {
-            if (!registerMap) {
-                registerMap = L.map('regMap').setView([13.736717, 100.523186], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(registerMap);
-                registerMarker = L.marker([13.736717, 100.523186], { draggable: true }).addTo(registerMap);
-                
-                registerMarker.on('dragend', function (e) {
-                    const pos = registerMarker.getLatLng();
-                    document.getElementById('regLat').value = pos.lat;
-                    document.getElementById('regLng').value = pos.lng;
+                    if (!registerMap) {
+                        registerMap = L.map('regMap').setView([13.736717, 100.523186], 13);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(registerMap);
+                        registerMarker = L.marker([13.736717, 100.523186], { draggable: true }).addTo(registerMap);
+                        
+                        registerMarker.on('dragend', function (e) {
+                            const pos = registerMarker.getLatLng();
+                            document.getElementById('regLat').value = pos.lat;
+                            document.getElementById('regLng').value = pos.lng;
+                        });
+
+                        // Auto-fetch current location
+                        setTimeout(() => {
+                            getCurrentLocation();
+                        }, 500);
+                    } else {
+                        registerMap.invalidateSize();
+                    }
                 });
 
-                // Auto-fetch current location
-                setTimeout(() => {
-                    getCurrentLocation();
-                }, 500);
-            } else {
-                registerMap.invalidateSize();
+                modalEl.addEventListener('hidden.bs.modal', function () {
+                    if (window.openedRegisterFromLinkModal) {
+                        window.openedRegisterFromLinkModal = false;
+                        const linkModalEl = document.getElementById('linkCustomerModal');
+                        if (linkModalEl) {
+                            const linkModal = bootstrap.Modal.getInstance(linkModalEl) || new bootstrap.Modal(linkModalEl);
+                            linkModal.show();
+                        }
+                        if (typeof loadLinkModalRegisterStatus === 'function') {
+                            loadLinkModalRegisterStatus();
+                        }
+                    }
+                });
             }
-        });
-        }
         });
 
         function getCurrentLocation() {
@@ -1248,10 +1624,10 @@
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>กำลังดำเนินการ...';
             
             try {
-                const houseNo = document.getElementById('regHouseNo').value;
-                const moo = document.getElementById('regMoo').value;
-                const name = document.getElementById('regName').value;
-                const phone = document.getElementById('regPhone').value;
+                const houseNo = document.getElementById('regHouseNo').value.trim();
+                const moo = document.getElementById('regMoo').value.trim();
+                const name = document.getElementById('regName').value.trim();
+                const phone = document.getElementById('regPhone').value.trim();
                 const type = document.getElementById('regType').value;
                 const lat = document.getElementById('regLat').value || null;
                 const lng = document.getElementById('regLng').value || null;
@@ -1312,27 +1688,39 @@
                     line_user_id: lineUserId
                 };
                 
+                let savedRecord = Object.assign({ created_at: new Date().toISOString() }, newRequest);
                 if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-                    const { error } = await supabaseClient.from('waste_register_requests').insert([newRequest]);
+                    const { data: insertedRows, error } = await supabaseClient.from('waste_register_requests').insert([newRequest]).select();
                     if (error) throw error;
+                    if (insertedRows && insertedRows[0]) savedRecord = insertedRows[0];
                 } else {
-                    // Fallback local storage
                     const id = 'REG-' + Math.floor(1000 + Math.random() * 9000);
                     newRequest.id = id;
                     newRequest.created_at = new Date().toISOString();
+                    savedRecord = newRequest;
                     let reqs = JSON.parse(localStorage.getItem('waste_register_requests')) || [];
                     reqs.push(newRequest);
                     localStorage.setItem('waste_register_requests', JSON.stringify(reqs));
                 }
+
+                // บันทึกลง localStorage ของผู้ใช้นี้เพื่อแสดงสถานะรออนุมัติในหน้าเชื่อมโยงทันที
+                try {
+                    let myReqs = JSON.parse(localStorage.getItem('my_waste_reg_requests') || '[]');
+                    myReqs.unshift(savedRecord);
+                    localStorage.setItem('my_waste_reg_requests', JSON.stringify(myReqs.slice(0, 10)));
+                } catch (e) {}
                 
                 const modal = bootstrap.Modal.getInstance(document.getElementById('registerWasteModal'));
                 if(modal) modal.hide();
                 document.getElementById('registerForm').reset();
                 if(registerMap) registerMap.setView([13.736717, 100.523186], 13);
+
+                if (typeof loadDynamicRequests === 'function') loadDynamicRequests();
+                if (typeof loadLinkModalRegisterStatus === 'function') loadLinkModalRegisterStatus();
                 
                 Swal.fire({
-                    title: 'ส่งคำขอสำเร็จ!',
-                    text: 'เทศบาลได้รับคำขอขึ้นทะเบียนของคุณแล้ว เจ้าหน้าที่จะดำเนินการตรวจสอบโดยเร็ว',
+                    title: 'ส่งคำขอสำเร็จ! (สถานะ: รออนุมัติ)',
+                    text: 'เทศบาลได้รับคำขอขึ้นทะเบียนของคุณแล้ว เมื่อเจ้าหน้าที่อนุมัติแล้ว ท่านสามารถค้นหาบ้านเลขที่และเชื่อมโยงข้อมูลได้ตามปกติ',
                     icon: 'success',
                     confirmButtonColor: '#10b981'
                 });
@@ -1345,38 +1733,291 @@
             }
         }
         
+        // GAS URL for Cancel Image Upload (Folder: https://drive.google.com/drive/folders/1Y_EJDGUXa1ENJlJ103dFfQR96g6dB_80)
+        // ดูโค้ด Google Apps Script ได้ที่ไฟล์ google-apps-script/cancel-upload.gs หรือ database/upload_waste_cancel.js
+        const CANCEL_UPLOAD_GAS_URL = "https://script.google.com/macros/s/AKfycbyizsKbjYD-sw7jRUJiUVICS-1eUXzECF_T4aYZUF4Q6H33BoZJJAERAeY9SqFjnMEl/exec";
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const mooSel = document.getElementById('cancelSearchMoo');
+            if (mooSel && mooSel.options.length <= 1) {
+                for (let i = 1; i <= 23; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = String(i);
+                    opt.textContent = `หมู่ ${i}`;
+                    mooSel.appendChild(opt);
+                }
+            }
+
+            const cancelModalEl = document.getElementById('cancelWasteModal');
+            if (cancelModalEl) {
+                cancelModalEl.addEventListener('shown.bs.modal', () => {
+                    loadInitialLinkedHousesForCancel();
+                });
+            }
+        });
+
+        async function loadInitialLinkedHousesForCancel() {
+            const resultsDiv = document.getElementById('cancelSearchResults');
+            const selectedId = document.getElementById('cancelCustomerId')?.value;
+            if (!resultsDiv || selectedId) return;
+
+            try {
+                const session = typeof LineAuth !== 'undefined' ? LineAuth.getSession() : null;
+                if (session && session.lineUserId && typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    const { data } = await supabaseClient
+                        .from('waste_customer_line_links')
+                        .select('waste_customers ( id, name, house_no, moo, subdistrict, type, status )')
+                        .eq('line_user_id', session.lineUserId)
+                        .eq('status', 'active');
+
+                    const linkedCustomers = (data || [])
+                        .map(item => item.waste_customers)
+                        .filter(c => c && c.status === 'active');
+
+                    if (linkedCustomers.length > 0) {
+                        renderCancelCustomerSearchResults(linkedCustomers, 'บ้านที่เชื่อมโยงกับบัญชีของคุณ (กดเลือกได้ทันที)');
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not load linked houses for cancel modal:', e);
+            }
+            resultsDiv.innerHTML = '';
+        }
+
+        async function searchCustomerForCancel() {
+            const q = (document.getElementById('cancelSearchQuery')?.value || '').trim();
+            const moo = (document.getElementById('cancelSearchMoo')?.value || '').trim();
+            const resultsDiv = document.getElementById('cancelSearchResults');
+            if (!resultsDiv) return;
+
+            if (!q && !moo) {
+                resultsDiv.innerHTML = '<div class="text-center text-warning py-2 text-xs"><i class="fa-solid fa-circle-exclamation me-1"></i>กรุณาพิมพ์บ้านเลขที่ หรือ ชื่อเจ้าบ้าน หรือเลือกหมู่ เพื่อค้นหา</div>';
+                return;
+            }
+
+            resultsDiv.innerHTML = '<div class="text-center py-3 text-xs text-muted"><div class="spinner-border spinner-border-sm text-danger me-2"></div>กำลังค้นหาข้อมูลบ้านในระบบ...</div>';
+
+            try {
+                let list = [];
+                if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    let query = supabaseClient
+                        .from('waste_customers')
+                        .select('id, name, house_no, moo, subdistrict, type, status')
+                        .eq('status', 'active');
+
+                    if (moo) {
+                        query = query.eq('moo', moo);
+                    }
+                    if (q) {
+                        query = query.or(`house_no.ilike.%${q}%,name.ilike.%${q}%,id.ilike.%${q}%`);
+                    }
+
+                    const { data, error } = await query.limit(15);
+                    if (error) throw error;
+                    list = data || [];
+                } else {
+                    const localCusts = JSON.parse(localStorage.getItem('waste_customers') || '[]');
+                    list = localCusts.filter(c => {
+                        if (c.status !== 'active') return false;
+                        if (moo && String(c.moo) !== String(moo)) return false;
+                        if (q) {
+                            const hay = `${c.house_no || ''} ${c.name || ''} ${c.id || ''}`.toLowerCase();
+                            if (!hay.includes(q.toLowerCase())) return false;
+                        }
+                        return true;
+                    }).slice(0, 15);
+                }
+
+                if (list.length === 0) {
+                    resultsDiv.innerHTML = '<div class="p-2 rounded border bg-light text-center text-danger text-xs"><i class="fa-solid fa-circle-xmark me-1"></i>ไม่พบบ้านเลขที่นี้ในฐานข้อมูลผู้ใช้งานปกติ</div>';
+                    return;
+                }
+
+                renderCancelCustomerSearchResults(list, `ผลการค้นหา (${list.length} รายการ) — กดเลือกบ้านที่ต้องการยกเลิก`);
+            } catch (err) {
+                console.error('Error searching customer for cancel:', err);
+                resultsDiv.innerHTML = '<div class="text-center text-danger py-2 text-xs">เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่</div>';
+            }
+        }
+
+        function renderCancelCustomerSearchResults(list, headerText) {
+            const resultsDiv = document.getElementById('cancelSearchResults');
+            if (!resultsDiv) return;
+
+            let html = `<div class="text-xs fw-semibold text-muted mb-1">${headerText}</div><div class="list-group list-group-flush border rounded-3 overflow-hidden">`;
+            list.forEach(c => {
+                const safeJson = JSON.stringify({
+                    id: c.id,
+                    name: c.name || '',
+                    house_no: c.house_no || '',
+                    moo: c.moo || '',
+                    type: c.type || ''
+                }).replace(/"/g, '&quot;');
+
+                html += `
+                    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-2.5">
+                        <div class="me-2">
+                            <div class="fw-bold text-dark" style="font-size:0.85rem;">
+                                <i class="fa-solid fa-house-chimney text-danger me-1"></i>บ้านเลขที่ ${c.house_no} ม.${c.moo || '-'}
+                                <span class="badge bg-light text-secondary border ms-1" style="font-size:0.7rem;">รหัส: ${c.id}</span>
+                            </div>
+                            <div class="text-muted" style="font-size:0.78rem;">ชื่อเจ้าบ้าน: <strong>${c.name || '-'}</strong> ${c.type ? `(${c.type})` : ''}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-danger rounded-pill px-3 fw-semibold flex-shrink-0" style="font-size:0.78rem;" onclick="selectCustomerForCancel(${safeJson})">
+                            <i class="fa-solid fa-check me-1"></i>เลือก
+                        </button>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        }
+
+        function selectCustomerForCancel(c) {
+            if (!c) return;
+            document.getElementById('cancelCustomerId').value = c.id || '';
+            document.getElementById('cancelHouseNo').value = c.house_no || '';
+            document.getElementById('cancelMoo').value = c.moo || '';
+            const nameInput = document.getElementById('cancelName');
+            if (nameInput && !nameInput.value.trim()) {
+                nameInput.value = c.name || '';
+            } else if (nameInput) {
+                nameInput.value = c.name || nameInput.value;
+            }
+
+            const card = document.getElementById('cancelSelectedHouseCard');
+            const titleEl = document.getElementById('cancelSelectedHouseTitle');
+            const subEl = document.getElementById('cancelSelectedHouseSub');
+            if (card && titleEl && subEl) {
+                titleEl.innerHTML = `บ้านเลขที่ ${c.house_no} หมู่ที่ ${c.moo || '-'} <span class="badge bg-success ms-1">รหัส: ${c.id}</span>`;
+                subEl.textContent = `ชื่อเจ้าบ้านในระบบ: ${c.name || '-'}`;
+                card.classList.remove('d-none');
+            }
+
+            const resultsDiv = document.getElementById('cancelSearchResults');
+            if (resultsDiv) resultsDiv.innerHTML = '';
+        }
+
+        function clearSelectedCancelCustomer() {
+            document.getElementById('cancelCustomerId').value = '';
+            document.getElementById('cancelHouseNo').value = '';
+            document.getElementById('cancelMoo').value = '';
+            const card = document.getElementById('cancelSelectedHouseCard');
+            if (card) card.classList.add('d-none');
+            loadInitialLinkedHousesForCancel();
+        }
+
         async function submitCancelRequest(event) {
             event.preventDefault();
-            const houseNo = document.getElementById('cancelHouseNo').value;
-            const moo = document.getElementById('cancelMoo').value;
-            const name = document.getElementById('cancelName').value;
-            const reason = document.getElementById('cancelReason').value;
+            const customerId = (document.getElementById('cancelCustomerId')?.value || '').trim();
+            const houseNo = document.getElementById('cancelHouseNo').value.trim();
+            const moo = document.getElementById('cancelMoo').value.trim();
+            const name = document.getElementById('cancelName').value.trim();
+            const phone = document.getElementById('cancelPhone').value.trim();
+            const reason = document.getElementById('cancelReason').value.trim();
+            const imageInput = document.getElementById('cancelImage');
+            const imageFile = imageInput && imageInput.files ? imageInput.files[0] : null;
+
+            if (!customerId || !houseNo) {
+                Swal.fire('กรุณาค้นหาและเลือกบ้านเลขที่', 'โปรดกดปุ่ม "ค้นหา" และกด "เลือก" บ้านเลขที่ในระบบที่ต้องการยกเลิกก่อนส่งคำขอ เพื่อเชื่อมโยงข้อมูลกับระบบหลังบ้าน', 'warning');
+                return;
+            }
             
             const btn = event.target.querySelector('button[type="submit"]');
             const origBtnText = btn.innerHTML;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>กำลังส่งคำขอ...';
             btn.disabled = true;
 
-            const id = 'CAN-' + Math.floor(1000 + Math.random() * 9000);
-            const date = new Date().toISOString().split('T')[0];
-            
-            const newCancel = {
-                id: id,
-                house_no: houseNo,
-                moo: moo,
-                name: name,
-                reason: reason,
-                date: date,
-                status: 'pending',
-                created_at: new Date().toISOString()
-            };
-            
             try {
+                let imageUrl = null;
+
+                // 1. Upload Image to Google Drive (Folder: 1Y_EJDGUXa1ENJlJ103dFfQR96g6dB_80) if selected
+                if (imageFile) {
+                    if (imageFile.size > 5 * 1024 * 1024) {
+                        Swal.fire('ขนาดไฟล์เกินกำหนด', 'กรุณาเลือกรูปภาพขนาดไม่เกิน 5MB', 'warning');
+                        btn.disabled = false;
+                        btn.innerHTML = origBtnText;
+                        return;
+                    }
+
+                    Swal.fire({
+                        title: 'กำลังอัปโหลดรูปภาพ...',
+                        text: 'กำลังบันทึกรูปภาพลง Google Drive กรุณารอสักครู่',
+                        allowOutsideClick: false,
+                        didOpen: () => Swal.showLoading()
+                    });
+
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(imageFile);
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = error => reject(error);
+                    });
+
+                    const uploadRes = await fetch(CANCEL_UPLOAD_GAS_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            base64: base64,
+                            filename: `Cancel_${Date.now()}_${houseNo.replace(/\//g, '-')}.jpg`,
+                            mimeType: imageFile.type || 'image/jpeg'
+                        })
+                    });
+
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.status === 'success') {
+                        imageUrl = uploadData.url;
+                    } else {
+                        throw new Error(uploadData.message || 'อัปโหลดรูปภาพไม่สำเร็จ');
+                    }
+                }
+
+                Swal.fire({ title: 'กำลังบันทึกข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                const id = 'CAN-' + Math.floor(1000 + Math.random() * 9000);
+                const date = new Date().toISOString().split('T')[0];
+
+                const metaParts = [];
+                if (customerId) metaParts.push(`[รหัสลูกค้า:${customerId}]`);
+                if (phone) metaParts.push(`[โทร:${phone}]`);
+                if (imageUrl) metaParts.push(`[รูปภาพ:${imageUrl}]`);
+
+                const newCancel = {
+                    id: id,
+                    customer_id: customerId,
+                    house_no: houseNo,
+                    moo: moo,
+                    name: name,
+                    phone: phone,
+                    reason: reason,
+                    image_url: imageUrl,
+                    note: metaParts.join(' '),
+                    date: date,
+                    status: 'pending',
+                    created_at: new Date().toISOString()
+                };
+
                 if (typeof supabaseClient !== 'undefined' && supabaseClient) {
                     const { error } = await supabaseClient.from('waste_cancel_requests').insert([newCancel]);
                     if (error) {
-                        console.error('Supabase error:', error);
-                        throw new Error('ไม่สามารถบันทึกข้อมูลลงฐานข้อมูลได้');
+                        // Fallback in case 'customer_id', 'phone', or 'image_url' columns haven't been migrated in Supabase yet
+                        console.warn('Retrying insert with metadata in note column:', error.message);
+                        const fallbackCancel = {
+                            id: id,
+                            house_no: houseNo,
+                            moo: moo,
+                            name: name,
+                            reason: reason,
+                            note: metaParts.join(' '),
+                            date: date,
+                            status: 'pending',
+                            created_at: new Date().toISOString()
+                        };
+                        const { error: err2 } = await supabaseClient.from('waste_cancel_requests').insert([fallbackCancel]);
+                        if (err2) {
+                            console.error('Supabase error:', err2);
+                            throw new Error('ไม่สามารถบันทึกข้อมูลลงฐานข้อมูลได้');
+                        }
                     }
                 } else {
                     let cancels = [];
@@ -1388,6 +2029,9 @@
                 const modal = bootstrap.Modal.getInstance(document.getElementById('cancelWasteModal'));
                 if(modal) modal.hide();
                 document.getElementById('cancelForm').reset();
+                clearSelectedCancelCustomer();
+
+                if (typeof loadDynamicRequests === 'function') loadDynamicRequests();
                 
                 Swal.fire({
                     title: 'ส่งคำขอสำเร็จ!',
@@ -1472,23 +2116,64 @@
                 </div>
                 <div class="modal-body p-4">
                     <form id="cancelForm" onsubmit="submitCancelRequest(event)">
+                        <input type="hidden" id="cancelCustomerId">
+
+                        <!-- Search & Select House from Database -->
+                        <div class="p-3 mb-3 rounded-3" style="background:#fef2f2; border:1px solid #fecaca;">
+                            <label class="form-label text-sm fw-bold text-danger mb-1">
+                                <i class="fa-solid fa-magnifying-glass-location me-1"></i>ค้นหาและเลือกบ้านเลขที่ในระบบที่ต้องการยกเลิก <span class="text-danger">*</span>
+                            </label>
+                            <div class="text-xs text-muted mb-2">ค้นหาบ้านเลขที่จากฐานข้อมูลเทศบาลเพื่อเชื่อมโยงบ้านที่จะขอยกเลิก</div>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="cancelSearchQuery" placeholder="บ้านเลขที่ หรือ ชื่อเจ้าบ้าน..." onkeypress="if(event.key==='Enter'){event.preventDefault(); searchCustomerForCancel();}">
+                                <select class="form-select" id="cancelSearchMoo" style="max-width: 105px;">
+                                    <option value="">ทุกหมู่</option>
+                                </select>
+                                <button type="button" class="btn btn-danger fw-semibold px-3" onclick="searchCustomerForCancel()">
+                                    <i class="fa-solid fa-magnifying-glass me-1"></i>ค้นหา
+                                </button>
+                            </div>
+                            <div id="cancelSearchResults" class="mt-2" style="max-height: 190px; overflow-y: auto;"></div>
+                        </div>
+
+                        <!-- Selected House Banner -->
+                        <div id="cancelSelectedHouseCard" class="p-2.5 mb-3 rounded-3 border border-success bg-success bg-opacity-10 d-none" style="padding: 10px 12px;">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="text-xs text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i>เลือกบ้านในระบบที่ต้องการยกเลิกแล้ว</div>
+                                    <div class="fw-bold text-dark text-sm" id="cancelSelectedHouseTitle">-</div>
+                                    <div class="text-xs text-muted" id="cancelSelectedHouseSub">-</div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill py-0 px-2" style="font-size:0.75rem;" onclick="clearSelectedCancelCustomer()">เปลี่ยนบ้าน</button>
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label text-sm fw-semibold">ชื่อ-นามสกุลผู้ยื่นคำขอ</label>
-                            <input type="text" class="form-control form-control-sm" id="cancelName" required>
+                            <input type="text" class="form-control form-control-sm" id="cancelName" required placeholder="นาย สมชาย ใจดี">
                         </div>
                         <div class="row g-2 mb-3">
                             <div class="col-6">
-                                <label class="form-label text-sm fw-semibold">บ้านเลขที่</label>
-                                <input type="text" class="form-control form-control-sm" id="cancelHouseNo" required>
+                                <label class="form-label text-sm fw-semibold">บ้านเลขที่ (จากระบบ)</label>
+                                <input type="text" class="form-control form-control-sm bg-light fw-semibold" id="cancelHouseNo" required readonly placeholder="กดค้นหาและเลือกบ้านด้านบน">
                             </div>
                             <div class="col-6">
-                                <label class="form-label text-sm fw-semibold">หมู่ที่</label>
-                                <input type="text" class="form-control form-control-sm" id="cancelMoo" required>
+                                <label class="form-label text-sm fw-semibold">หมู่ที่ (จากระบบ)</label>
+                                <input type="text" class="form-control form-control-sm bg-light fw-semibold" id="cancelMoo" required readonly placeholder="หมู่ที่">
                             </div>
                         </div>
-                        <div class="mb-4">
+                        <div class="mb-3">
+                            <label class="form-label text-sm fw-semibold">เบอร์ติดต่อกลับ</label>
+                            <input type="tel" class="form-control form-control-sm" id="cancelPhone" required placeholder="08X-XXX-XXXX">
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label text-sm fw-semibold">เหตุผลการขอยกเลิก</label>
                             <textarea class="form-control form-control-sm" id="cancelReason" rows="3" required placeholder="ย้ายที่อยู่, ไม่มีผู้อยู่อาศัย, ฯลฯ"></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label text-sm fw-semibold">รูปภาพสถานที่ / รูปภาพประกอบ</label>
+                            <input type="file" class="form-control form-control-sm" id="cancelImage" accept="image/jpeg,image/png">
+                            <div class="form-text" style="font-size:0.75rem;">รองรับเฉพาะไฟล์ JPG, PNG ขนาดไม่เกิน 5MB</div>
                         </div>
                         <button type="submit" class="btn btn-danger w-100 rounded-pill fw-bold" style="background:#dc2626; border:none;">ส่งคำขอยกเลิก</button>
                     </form>

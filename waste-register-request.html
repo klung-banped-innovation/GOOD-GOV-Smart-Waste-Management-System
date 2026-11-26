@@ -85,7 +85,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     Swal.fire({title: 'กำลังโหลดข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
     try {
         initWasteData();
-        await loadRegRequests();
+        await Promise.all([
+            fetchWasteFeeTypes(),
+            fetchWasteCustomers(),
+            loadRegRequests()
+        ]);
         Swal.close();
     } catch(e) {
         console.error(e);
@@ -94,6 +98,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 async function loadRegRequests() {
+    await fetchWasteFeeTypes();
     const reqs = await fetchRegisterRequestsDB();
     renderRegRequests(reqs);
 }
@@ -118,7 +123,6 @@ function renderRegRequests(reqs) {
         const hasLocation = r.lat && r.lng ? true : false;
         const statusBadge = r.status==='pending' ? 'bg-warning text-dark' : r.status==='approved' ? 'bg-success' : 'bg-danger';
         const statusText = r.status==='pending' ? 'รอตรวจสอบ' : r.status==='approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธ';
-        const idDisplay = r.id ? (typeof r.id === 'string' && r.id.length > 8 ? r.id.substring(0,8)+'...' : r.id) : (idx+1);
 
         return `<tr>
         <td class="ps-4 fw-semibold text-xs">${idx+1}</td>
@@ -133,18 +137,105 @@ function renderRegRequests(reqs) {
             ${!hasImage && !hasLocation ? '<span class="text-xs text-muted">-</span>' : ''}
         </td>
         <td><span class="badge ${statusBadge}">${statusText}</span></td>
-        <td class="pe-4 text-center">${r.status==='pending'?`
-            <button class="btn btn-xs btn-outline-info me-1" onclick="viewRegDetail('${r.id}')"><i class="fa-solid fa-pen-to-square me-1"></i>ดู/แก้ไข</button>
-            <button class="btn btn-xs btn-success me-1" onclick="approveReg('${r.id}')"><i class="fa-solid fa-check me-1"></i>อนุมัติ</button>
-            <button class="btn btn-xs btn-outline-danger" onclick="rejectReg('${r.id}')"><i class="fa-solid fa-xmark"></i></button>
-        `:'<span class="text-xs text-muted">ดำเนินการแล้ว</span>'}</td>
+        <td class="pe-4 text-center">
+            ${r.status==='pending'?`
+                <button class="btn btn-xs btn-outline-info me-1" onclick="viewRegDetail('${r.id}')"><i class="fa-solid fa-pen-to-square me-1"></i>ดู/แก้ไข</button>
+                <button class="btn btn-xs btn-success me-1" onclick="approveReg('${r.id}')"><i class="fa-solid fa-check me-1"></i>อนุมัติ</button>
+                <button class="btn btn-xs btn-outline-danger me-1" onclick="rejectReg('${r.id}')" title="ปฏิเสธคำขอ"><i class="fa-solid fa-xmark"></i></button>
+            `:'<span class="text-xs text-muted me-2">ดำเนินการแล้ว</span>'}
+            <button class="btn btn-xs btn-outline-danger" onclick="deleteRegRequest('${r.id}')" title="ลบคำขอ"><i class="fa-solid fa-trash-can"></i></button>
+        </td>
     </tr>`;
     }).join('');
 }
 
 let detailMap = null;
 
-function viewRegDetail(id) {
+function onSelectRegFeeRate(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt) return;
+    const selectedType = opt.getAttribute('data-type') || '';
+    const selectedFee = opt.getAttribute('data-fee') || '';
+
+    const typeSelect = document.getElementById('editRegType');
+    if (typeSelect && selectedType) {
+        // Ensure option exists in #editRegType
+        let exists = Array.from(typeSelect.options).some(o => o.value === selectedType);
+        if (!exists) {
+            const newOpt = document.createElement('option');
+            newOpt.value = selectedType;
+            newOpt.textContent = selectedType;
+            typeSelect.appendChild(newOpt);
+        }
+        typeSelect.value = selectedType;
+    }
+
+    const feeInput = document.getElementById('editRegFee');
+    if (feeInput && selectedFee !== '') {
+        feeInput.value = selectedFee;
+    }
+
+    const summaryEl = document.getElementById('regFeeSelectedSummary');
+    if (summaryEl) {
+        if (selectedType && selectedFee !== '') {
+            summaryEl.innerHTML = `<i class="fa-solid fa-circle-check text-success me-1"></i>จะบันทึกเป็นประเภท: <b class="text-dark">${selectedType}</b> • ค่าธรรมเนียม: <b class="text-success">฿${formatMoney(Number(selectedFee))}/เดือน</b>`;
+        } else {
+            summaryEl.innerHTML = `<span class="text-danger"><i class="fa-solid fa-circle-exclamation me-1"></i>กรุณาเลือกเรทราคาค่าธรรมเนียมขยะ</span>`;
+        }
+    }
+}
+
+function extractDriveFileId(url) {
+    if (!url || typeof url !== 'string') return '';
+    const m1 = url.match(/\/d\/([a-zA-Z0-9_-]{15,})/);
+    if (m1) return m1[1];
+    const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+    if (m2) return m2[1];
+    const m3 = url.match(/[-\w]{25,}/);
+    if (m3 && (url.includes('drive.google.com') || url.includes('googleusercontent.com'))) return m3[0];
+    return '';
+}
+
+function handleDriveImgError(imgEl, fileId, rawUrl) {
+    if (!imgEl) return;
+    const step = parseInt(imgEl.getAttribute('data-fallback-step') || '0', 10);
+    if (fileId && step === 0) {
+        imgEl.setAttribute('data-fallback-step', '1');
+        imgEl.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+        return;
+    }
+    if (fileId && step === 1) {
+        imgEl.setAttribute('data-fallback-step', '2');
+        imgEl.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+        return;
+    }
+    // Fallback to Google Drive Embedded Preview iframe (works even when 3rd-party image cookies are blocked in Incognito)
+    const wrapper = imgEl.parentElement;
+    if (wrapper) {
+        if (fileId) {
+            wrapper.innerHTML = `
+                <iframe src="https://drive.google.com/file/d/${fileId}/preview"
+                        style="width:100%; height:240px; border:1px solid #dee2e6; border-radius:10px; background:#f8fafc;"
+                        allow="autoplay"></iframe>
+            `;
+        } else {
+            wrapper.innerHTML = `
+                <div class="p-4 rounded-3 border bg-light text-muted text-sm">
+                    <i class="fa-regular fa-image fa-2x mb-2 d-block opacity-50"></i>
+                    ไม่สามารถแสดงตัวอย่างรูปภาพได้ กรุณากดปุ่ม "เปิดใน Google Drive" ด้านล่าง
+                </div>
+            `;
+        }
+    }
+}
+
+async function viewRegDetail(id) {
+    // Ensure fee types are loaded from settings
+    let feeTypes = getWasteFeeTypes();
+    if (!feeTypes || feeTypes.length === 0) {
+        feeTypes = await fetchWasteFeeTypes();
+    }
+
     const reqs = getRegisterRequests();
     const r = reqs.find(x => String(x.id) === String(id));
     if (!r) return;
@@ -155,13 +246,21 @@ function viewRegDetail(id) {
 
     let imageHtml = '';
     if (r.image_url) {
-        const driveId = r.image_url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-        const imgSrc = driveId ? `https://drive.google.com/thumbnail?id=${driveId[1]}&sz=w800` : r.image_url;
+        const fileId = extractDriveFileId(r.image_url);
+        const primaryImgSrc = fileId ? `https://lh3.googleusercontent.com/d/${fileId}=w800` : r.image_url;
+        const safeRawUrl = String(r.image_url).replace(/'/g, "\\'");
         imageHtml = `
         <div class="mb-3">
             <label class="form-label fw-semibold text-sm"><i class="fa-solid fa-image text-info me-1"></i>รูปภาพสถานที่</label>
             <div class="text-center">
-                <img src="${imgSrc}" class="img-fluid rounded shadow-sm" style="max-height:300px;cursor:pointer;" onclick="window.open('${r.image_url}','_blank')" onerror="this.src='https://via.placeholder.com/400x200?text=ไม่สามารถแสดงรูปภาพได้'">
+                <div id="regDetailImgWrapper">
+                    <img src="${primaryImgSrc}"
+                         referrerpolicy="no-referrer"
+                         class="img-fluid rounded shadow-sm border"
+                         style="max-height:260px;cursor:pointer;"
+                         onclick="window.open('${safeRawUrl}','_blank')"
+                         onerror="handleDriveImgError(this, '${fileId}', '${safeRawUrl}')">
+                </div>
                 <div class="mt-2"><a href="${r.image_url}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i>เปิดใน Google Drive</a></div>
             </div>
         </div>`;
@@ -179,17 +278,44 @@ function viewRegDetail(id) {
 
     let infoHtml = '';
     if (r.status === 'pending') {
-        const feeTypes = getWasteFeeTypes();
-        const typeOptions = feeTypes.map(f => `<option value="${f.type}" ${r.type===f.type?'selected':''}>${f.type}</option>`).join('');
+        const typeNames = Array.from(new Set(['ประกอบกิจการ', 'บ้านทั่วไป', ...feeTypes.map(f => f.type), r.type].filter(Boolean)));
+        const typeOptions = typeNames.map(tName => `<option value="${tName}" ${r.type===tName?'selected':''}>${tName}</option>`).join('');
+
+        // Pre-match fee rate from waste_fee_types if possible
+        const initialMatchedFee = feeTypes.find(f => f.type === r.type) || null;
+        const rateOptionsHtml = feeTypes.map(f => {
+            const isSel = initialMatchedFee && String(initialMatchedFee.id) === String(f.id);
+            return `<option value="${f.id}" data-type="${f.type}" data-fee="${f.fee}" ${isSel ? 'selected' : ''}>${f.type} — ฿${formatMoney(f.fee)} / เดือน</option>`;
+        }).join('');
+        const initialFeeVal = initialMatchedFee ? initialMatchedFee.fee : '';
+        const initialTypeVal = initialMatchedFee ? initialMatchedFee.type : (r.type || '');
         
         infoHtml = `
             <table class="table table-sm table-borderless text-sm mb-0">
-                <tr><td class="text-muted align-middle" style="width:120px;"><i class="fa-solid fa-user me-1"></i>ชื่อ</td>
+                <tr><td class="text-muted align-middle" style="width:125px;"><i class="fa-solid fa-user me-1"></i>ชื่อ</td>
                     <td><input type="text" id="editRegName" class="form-control form-control-sm" value="${r.name || ''}"></td></tr>
                 <tr><td class="text-muted align-middle"><i class="fa-solid fa-house me-1"></i>บ้านเลขที่</td>
                     <td><div class="input-group input-group-sm"><input type="text" id="editRegHouseNo" class="form-control" value="${r.house_no || ''}"><span class="input-group-text">ม.</span><input type="text" id="editRegMoo" class="form-control" value="${r.moo || ''}"></div></td></tr>
-                <tr><td class="text-muted align-middle"><i class="fa-solid fa-building me-1"></i>ประเภท</td>
-                    <td><select id="editRegType" class="form-select form-select-sm"><option value="">เลือกประเภท...</option>${typeOptions}</select></td></tr>
+                <tr><td class="text-muted align-middle"><i class="fa-solid fa-building me-1"></i>ประเภทที่ขอ</td>
+                    <td>
+                        <select id="editRegType" class="form-select form-select-sm bg-light" disabled title="ประเภทจะถูกอัปเดตตามเรทราคาค่าธรรมเนียมที่เลือกด้านล่าง">
+                            <option value="">เลือกประเภท...</option>${typeOptions}
+                        </select>
+                        <div class="text-muted mt-1" style="font-size:0.72rem;">ผู้ยื่นขอเลือกมาเป็น: <b>${r.type || '-'}</b></div>
+                    </td></tr>
+                <tr><td class="text-muted align-middle"><i class="fa-solid fa-tags text-success me-1"></i>เรทค่าธรรมเนียม <span class="text-danger">*</span></td>
+                    <td>
+                        <select id="editRegFeeRate" class="form-select form-select-sm border-success fw-semibold text-dark" onchange="onSelectRegFeeRate(this)">
+                            <option value="" data-type="" data-fee="">-- เลือกเรทประเภทและราคาค่าธรรมเนียม --</option>
+                            ${rateOptionsHtml}
+                        </select>
+                        <input type="hidden" id="editRegFee" value="${initialFeeVal}">
+                        <div id="regFeeSelectedSummary" class="mt-1" style="font-size:0.75rem;">
+                            ${initialMatchedFee
+                                ? `<i class="fa-solid fa-circle-check text-success me-1"></i>จะบันทึกเป็นประเภท: <b class="text-dark">${initialTypeVal}</b> • ค่าธรรมเนียม: <b class="text-success">฿${formatMoney(Number(initialFeeVal))}/เดือน</b>`
+                                : `<span class="text-danger"><i class="fa-solid fa-circle-exclamation me-1"></i>กรุณาเลือกเรทราคาค่าธรรมเนียมขยะเพื่อกำหนดประเภทบ้านและราคา</span>`}
+                        </div>
+                    </td></tr>
                 <tr><td class="text-muted align-middle"><i class="fa-solid fa-phone me-1"></i>โทรศัพท์</td>
                     <td><input type="text" id="editRegPhone" class="form-control form-control-sm" value="${r.phone || ''}"></td></tr>
                 <tr><td class="text-muted"><i class="fa-solid fa-calendar me-1"></i>วันที่ยื่น</td><td class="align-middle">${dateStr}</td></tr>
@@ -240,7 +366,27 @@ function viewRegDetail(id) {
 }
 
 async function saveAndApproveReg(id) {
-    const result = await Swal.fire({title:'ยืนยันการแก้ไขและอนุมัติ?',text:'ระบบจะอัปเดตข้อมูลและสร้างทะเบียนลูกค้าใหม่อัตโนมัติ',icon:'question',showCancelButton:true,confirmButtonText:'บันทึกและอนุมัติ',cancelButtonText:'ยกเลิก',confirmButtonColor:'#057a55'});
+    const rateSelect = document.getElementById('editRegFeeRate');
+    const selectedOpt = rateSelect ? rateSelect.options[rateSelect.selectedIndex] : null;
+    const selectedType = (selectedOpt && selectedOpt.getAttribute('data-type')) || document.getElementById('editRegType')?.value || '';
+    const selectedFeeRaw = (selectedOpt && selectedOpt.getAttribute('data-fee')) || document.getElementById('editRegFee')?.value || '';
+
+    if (!rateSelect || !rateSelect.value || !selectedType || selectedFeeRaw === '') {
+        Swal.fire('กรุณาเลือกเรทค่าธรรมเนียม', 'โปรดเลือกเรทประเภทและราคาค่าธรรมเนียมขยะก่อนกดบันทึกและอนุมัติ', 'warning');
+        return;
+    }
+
+    const selectedFee = Number(selectedFeeRaw) || 0;
+
+    const result = await Swal.fire({
+        title: 'ยืนยันการบันทึกและอนุมัติ?',
+        html: `ระบบจะสร้างทะเบียนลูกค้าใหม่โดยกำหนด:<br><b>ประเภทบ้าน:</b> ${selectedType}<br><b>ค่าธรรมเนียม:</b> <span class="text-success fw-bold">฿${formatMoney(selectedFee)} / เดือน</span>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'บันทึกและอนุมัติ',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#057a55'
+    });
     if (!result.isConfirmed) return;
 
     Swal.fire({title:'กำลังดำเนินการ...',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
@@ -250,24 +396,21 @@ async function saveAndApproveReg(id) {
         const r = reqs.find(x => String(x.id) === String(id));
         if (!r) { Swal.fire('ไม่พบข้อมูล','','error'); return; }
 
-        // Update with new values from form
+        // Update with new values from form including selected fee type
         r.name = document.getElementById('editRegName').value || r.name;
         r.house_no = document.getElementById('editRegHouseNo').value || r.house_no;
         r.moo = document.getElementById('editRegMoo').value || r.moo;
-        r.type = document.getElementById('editRegType').value || r.type;
+        r.type = selectedType;
         r.phone = document.getElementById('editRegPhone').value || r.phone;
-        
         r.status = 'approved';
 
         // Update status in Supabase
         await saveRegisterRequestDB(r);
 
-        // Get fee from fee types 
-        const feeTypes = getWasteFeeTypes();
-        const matchedFee = feeTypes.find(f => f.type === r.type);
-        const fee = matchedFee ? matchedFee.fee : 40;
+        // Ensure fresh customer list before generating ID
+        await fetchWasteCustomers();
 
-        // Create new customer
+        // Create new customer with selected type and fee
         const newCustomer = {
             id: generateCustomerId(),
             house_no: r.house_no,
@@ -275,8 +418,8 @@ async function saveAndApproveReg(id) {
             name: r.name,
             id_card: '',
             phone: r.phone || '',
-            type: r.type,
-            fee: fee,
+            type: selectedType,
+            fee: selectedFee,
             start_date: new Date().toISOString().split('T')[0],
             status: 'active',
             lat: r.lat || null,
@@ -289,7 +432,12 @@ async function saveAndApproveReg(id) {
         const modal = bootstrap.Modal.getInstance(document.getElementById('regDetailModal'));
         if(modal) modal.hide();
 
-        Swal.fire({title:'อนุมัติสำเร็จ!',text:'แก้ไขข้อมูลและสร้างทะเบียนลูกค้าใหม่เรียบร้อย',icon:'success',confirmButtonColor:'#057a55'});
+        Swal.fire({
+            title: 'อนุมัติสำเร็จ!',
+            html: `สร้างทะเบียนลูกค้าใหม่เรียบร้อย<br><b>ประเภทบ้าน:</b> ${selectedType} (฿${formatMoney(selectedFee)}/เดือน)`,
+            icon: 'success',
+            confirmButtonColor: '#057a55'
+        });
         await loadRegRequests();
     } catch(err) {
         console.error(err);
@@ -298,51 +446,8 @@ async function saveAndApproveReg(id) {
 }
 
 async function approveReg(id) {
-    const result = await Swal.fire({title:'อนุมัติคำขอ?',text:'ระบบจะสร้างทะเบียนลูกค้าใหม่อัตโนมัติ',icon:'question',showCancelButton:true,confirmButtonText:'อนุมัติ',cancelButtonText:'ยกเลิก',confirmButtonColor:'#057a55'});
-    if (!result.isConfirmed) return;
-
-    Swal.fire({title:'กำลังดำเนินการ...',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
-
-    try {
-        const reqs = getRegisterRequests();
-        const r = reqs.find(x => String(x.id) === String(id));
-        if (!r) { Swal.fire('ไม่พบข้อมูล','','error'); return; }
-
-        r.status = 'approved';
-
-        // Update status in Supabase
-        await saveRegisterRequestDB(r);
-
-        // Get fee from fee types 
-        const feeTypes = getWasteFeeTypes();
-        const matchedFee = feeTypes.find(f => f.type === r.type);
-        const fee = matchedFee ? matchedFee.fee : 40;
-
-        // Create new customer
-        const newCustomer = {
-            id: generateCustomerId(),
-            house_no: r.house_no,
-            moo: r.moo,
-            name: r.name,
-            id_card: '',
-            phone: r.phone || '',
-            type: r.type,
-            fee: fee,
-            start_date: new Date().toISOString().split('T')[0],
-            status: 'active',
-            lat: r.lat || null,
-            lng: r.lng || null,
-            note: 'สร้างจากคำขอขึ้นทะเบียน'
-        };
-
-        await saveWasteCustomerDB(newCustomer);
-        
-        Swal.fire({title:'อนุมัติสำเร็จ!',text:'สร้างทะเบียนลูกค้าใหม่เรียบร้อย',icon:'success',confirmButtonColor:'#057a55'});
-        await loadRegRequests();
-    } catch(err) {
-        console.error(err);
-        Swal.fire('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถดำเนินการได้', 'error');
-    }
+    // เปิดหน้าต่างรายละเอียดคำขอเพื่อให้เจ้าหน้าที่ตรวจสอบและเลือกเรทราคาค่าธรรมเนียมขยะก่อนอนุมัติ
+    await viewRegDetail(id);
 }
 
 async function rejectReg(id) {
@@ -366,6 +471,35 @@ async function rejectReg(id) {
     } catch(err) {
         console.error(err);
         Swal.fire('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถดำเนินการได้', 'error');
+    }
+}
+
+async function deleteRegRequest(id) {
+    const reqs = getRegisterRequests();
+    const r = reqs.find(x => String(x.id) === String(id));
+    const label = r ? `${r.name || '-'} (บ้านเลขที่ ${r.house_no || '-'} ม.${r.moo || '-'})` : id;
+
+    const result = await Swal.fire({
+        title: 'ยืนยันการลบคำขอ?',
+        html: `ต้องการลบคำขอขึ้นทะเบียนของ<br><b>${label}</b> หรือไม่?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: '<i class="fa-solid fa-trash-can me-1"></i>ลบคำขอ',
+        cancelButtonText: 'ยกเลิก'
+    });
+    if (!result.isConfirmed) return;
+
+    Swal.fire({title: 'กำลังลบคำขอ...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+    try {
+        await deleteRegisterRequestDB(id);
+        Swal.close();
+        showToast('ลบคำขอขึ้นทะเบียนเรียบร้อยแล้ว', 'success');
+        await loadRegRequests();
+    } catch (err) {
+        console.error(err);
+        Swal.fire('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถลบคำขอได้', 'error');
     }
 }
 </script>
