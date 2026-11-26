@@ -627,24 +627,62 @@ function buildInvoicePrintCSS(perPage = 1) {
             color: #111;
         }
         .inv-qr-area {
-            width: 175px;
+            width: 195px;
             text-align: center;
             flex-shrink: 0;
         }
         .inv-qr-img {
-            width: 92px;
-            height: 92px;
+            width: ${isTwoPerPage ? '125px' : '155px'};
+            height: ${isTwoPerPage ? '125px' : '155px'};
             object-fit: contain;
             border: 1px solid #e5e7eb;
-            padding: 2px;
+            padding: 3px;
             background: #fff;
         }
         .inv-qr-caption {
             font-size: 8.5pt;
             font-weight: 600;
             color: #111;
-            margin-top: 2px;
+            margin-top: 4px;
             white-space: nowrap;
+        }
+        .inv-citizen-qr-box {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            margin-top: ${isTwoPerPage ? '4px' : '8px'};
+            padding: ${isTwoPerPage ? '4px 8px' : '6px 10px'};
+            border: 1px dashed #cbd5e1;
+            border-radius: 6px;
+            background-color: #f8fafc;
+            text-align: left;
+            max-width: 490px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .inv-citizen-qr-img {
+            width: ${isTwoPerPage ? '52px' : '68px'};
+            height: ${isTwoPerPage ? '52px' : '68px'};
+            object-fit: contain;
+            border: 1px solid #e2e8f0;
+            padding: 2px;
+            background: #fff;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        .inv-citizen-qr-text {
+            font-size: ${isTwoPerPage ? '8.5pt' : '9.5pt'};
+            font-weight: 700;
+            color: #0f5132;
+            line-height: 1.35;
+        }
+        .inv-citizen-qr-sub {
+            display: block;
+            font-size: ${isTwoPerPage ? '8pt' : '9pt'};
+            font-weight: 600;
+            color: #1e293b;
+            margin-top: 1px;
         }
 
         @media print {
@@ -658,6 +696,39 @@ function buildInvoicePrintCSS(perPage = 1) {
             }
         }
     `;
+}
+
+/**
+ * แปลงลิงก์ Google Drive เป็นลิงก์รูปภาพโดยตรงสำหรับแสดงในใบแจ้งหนี้
+ */
+function formatInvoiceCitizenQrUrl(rawUrl, fallbackPortalUrl) {
+    const clean = String(rawUrl || '').trim();
+    if (clean) {
+        if (clean.startsWith('data:image/')) {
+            return { primaryUrl: clean, fallbackUrl: '' };
+        }
+        let fileId = '';
+        const matchD = clean.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || clean.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        const matchId = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (matchD && matchD[1]) fileId = matchD[1];
+        else if (matchId && matchId[1]) fileId = matchId[1];
+
+        if (fileId) {
+            return {
+                primaryUrl: `https://lh3.googleusercontent.com/d/${fileId}=w800`,
+                fallbackUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`
+            };
+        }
+        return { primaryUrl: clean, fallbackUrl: '' };
+    }
+    const portal = String(fallbackPortalUrl || '').trim();
+    if (portal) {
+        return {
+            primaryUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=4&data=${encodeURIComponent(portal)}`,
+            fallbackUrl: ''
+        };
+    }
+    return { primaryUrl: '', fallbackUrl: '' };
 }
 
 /**
@@ -819,6 +890,23 @@ function buildSingleInvoiceHTML(invData, options = {}) {
     const bcInfo = buildComcodeBarcodeData(c, invData.totalAmount, settings, invData.invoiceNo);
     const uniqueBarcodeId = `bc_${c.id}_${Math.random().toString(36).substring(2, 7)}`;
 
+    // สร้าง HTML สำหรับ QRCODE ระบบบริการประชาชน (แสดงด้านล่าง Barcode)
+    const rawCitizenQr = settings.qr_code || settings.citizen_qr_url || localStorage.getItem('waste_citizen_qr_url') || '';
+    const fallbackPortalUrl = settings.citizen_portal_url || localStorage.getItem('waste_citizen_portal_url') || (baseHref + 'waste-payment-portal.html');
+    const citizenQrObj = formatInvoiceCitizenQrUrl(rawCitizenQr, fallbackPortalUrl);
+    const citizenQrOnError = citizenQrObj.fallbackUrl
+        ? `onerror="this.onerror=null; this.src='${citizenQrObj.fallbackUrl}';"`
+        : '';
+    const citizenQrSectionHTML = citizenQrObj.primaryUrl ? `
+        <div class="inv-citizen-qr-box">
+            <img src="${citizenQrObj.primaryUrl}" class="inv-citizen-qr-img" referrerpolicy="no-referrer" alt="QRCODE ระบบบริการประชาชน" ${citizenQrOnError}>
+            <div class="inv-citizen-qr-text">
+                ระบบบริการประชาชน
+                <span class="inv-citizen-qr-sub">(ตรวจสอบข้อมูลการชำระ และชำระค่าธรรมเนียมขยะย้อนหลัง)</span>
+            </div>
+        </div>
+    ` : '';
+
     return {
         barcodeId: uniqueBarcodeId,
         barcodeData: bcInfo.barcodeData,
@@ -936,11 +1024,12 @@ function buildSingleInvoiceHTML(invData, options = {}) {
                 </div>
             </div>
 
-            <!-- ส่วนล่าง: Barcode & QR Code ของ Comcode -->
+            <!-- ส่วนล่าง: Barcode & QR Code ของ Comcode และ QRCODE ระบบบริการประชาชน -->
             <div class="inv-barcode-qr-row">
                 <div class="inv-barcode-area">
                     <svg id="${uniqueBarcodeId}" class="inv-barcode-svg"></svg>
                     <div class="inv-barcode-text">${bcInfo.barcodeTextDisplay}</div>
+                    ${citizenQrSectionHTML}
                 </div>
                 <div class="inv-qr-area">
                     <img id="qr_${uniqueBarcodeId}" src="${bcInfo.qrUrl}" class="inv-qr-img" alt="QR Code">
@@ -1035,7 +1124,7 @@ async function openInvoicePrintWindow(invoiceDataList, options = {}) {
                         const qr = qrcode(0, 'M');
                         qr.addData(b.data);
                         qr.make();
-                        qrEl.src = qr.createDataURL(4, 2);
+                        qrEl.src = qr.createDataURL(6, 2);
                     } catch (e) {
                         console.error('QR error:', e);
                     }

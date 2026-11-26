@@ -51,6 +51,15 @@ function formatMonthsGroupedByYear(months_paid, isSlip = false) {
     return html;
 }
 
+function getPaymentNoteText(payment) {
+    if (!payment) return '';
+    if (payment.note) return String(payment.note).trim();
+    if (payment.status === 'completed' && payment.reject_reason) {
+        return String(payment.reject_reason).trim();
+    }
+    return '';
+}
+
 async function printReceiptA4(payment) {
     const w = window.open('', '_blank', 'width=800,height=900');
     if (!w) {
@@ -63,6 +72,7 @@ async function printReceiptA4(payment) {
     const orgName = settings.org_name || 'เทศบาลตำบล GOOD GOV';
     const orgAddress = settings.org_address || '';
     const orgPhone = settings.org_phone || '';
+    const noteText = getPaymentNoteText(payment);
     
     let staffSignatureHTML = '<div style="height:35px;"></div>';
     if (payment.staff && typeof supabaseClient !== 'undefined') {
@@ -105,7 +115,11 @@ async function printReceiptA4(payment) {
         <div class="info-grid">
             <div class="info-item"><div class="info-label">เลขที่ใบเสร็จ</div><div class="info-value">${payment.receipt_no}</div></div>
             <div class="info-item"><div class="info-label">วันที่</div><div class="info-value">${formatThaiDateFull(payment.date)}</div></div>
-            <div class="info-item"><div class="info-label">ชื่อผู้ชำระ</div><div class="info-value">${payment.customer_name}</div></div>
+            <div class="info-item">
+                <div class="info-label">ชื่อผู้ชำระ</div>
+                <div class="info-value">${payment.customer_name}</div>
+                ${noteText ? `<div style="font-size:12px;color:#4b5563;font-weight:500;margin-top:2px;">หมายเหตุ: ${noteText}</div>` : ''}
+            </div>
             <div class="info-item"><div class="info-label">บ้านเลขที่</div><div class="info-value">${payment.house_no}</div></div>
             <div class="info-item"><div class="info-label">เดือนที่ชำระ</div><div class="info-value" style="font-size:12px;">${formatMonthsGroupedByYear(payment.months_paid)}</div></div>
             <div class="info-item"><div class="info-label">ช่องทางชำระ</div><div class="info-value">${payment.method}</div></div>
@@ -168,6 +182,7 @@ async function printReceiptSlip(payment) {
     const settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
     const orgName = settings.org_name || 'เทศบาลตำบล GOOD GOV';
     const orgLogo = settings.org_logo ? `<img src="${settings.org_logo}" class="org-logo-img">` : '';
+    const noteText = getPaymentNoteText(payment);
     
     let staffSignatureHTML = '<div style="height:25px;"></div><div>(ลายมือชื่อ) ..........................................</div>';
     if (payment.staff && typeof supabaseClient !== 'undefined') {
@@ -214,6 +229,7 @@ async function printReceiptSlip(payment) {
     <div class="row"><span>เลขที่:</span><span>${payment.receipt_no}</span></div>
     <div class="row"><span>วันที่:</span><span>${dateFormatted}</span></div><hr>
     <div class="row"><span>ชื่อ:</span><span>${payment.customer_name}</span></div>
+    ${noteText ? `<div class="row" style="font-size:15px;color:#4b5563;"><span>หมายเหตุ:</span><span>${noteText}</span></div>` : ''}
     <div class="row"><span>บ้านเลขที่:</span><span>${payment.house_no}</span></div>
     <div class="row" style="align-items:flex-start;"><span>เดือน:</span><span style="text-align:right;">${formatMonthsGroupedByYear(payment.months_paid, true)}</span></div>
     <div class="row"><span>ช่องทาง:</span><span>${payment.method}</span></div><hr>
@@ -234,7 +250,7 @@ async function printReceiptSlip(payment) {
 // ============================================
 // WALK-IN PAYMENT PROCESSING (Async + Supabase)
 // ============================================
-async function processWalkInPayment(customerId, selectedMonths, method, staffName, customReceiptNo, payDate = null) {
+async function processWalkInPayment(customerId, selectedMonths, method, staffName, customReceiptNo, payDate = null, note = '') {
     const customers = getWasteCustomers();
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return null;
@@ -262,7 +278,8 @@ async function processWalkInPayment(customerId, selectedMonths, method, staffNam
         time: now.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}),
         status: 'completed',
         staff: staffName,
-        source: 'walk-in'
+        source: 'walk-in',
+        note: note || ''
     };
 
     // Save payment to Supabase + localStorage
@@ -285,6 +302,20 @@ async function processWalkInPayment(customerId, selectedMonths, method, staffNam
     if (typeof autoSaveReceiptToDrive === 'function') {
         autoSaveReceiptToDrive(payment).catch(function(e) {
             console.warn('Auto save receipt failed:', e);
+        });
+    }
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'payment',
+            action_type: 'PAYMENT',
+            action_label: 'รับชำระเงิน (ออกใบเสร็จ)',
+            module: 'รับชำระเงิน',
+            module_key: 'waste-payments',
+            target_id: payment.receipt_no || payment.id,
+            target_name: `${payment.customer_name || '-'} (${payment.house_no || '-'})`,
+            detail: `ออกใบเสร็จรับเงินเลขที่ ${payment.receipt_no} ให้ "${payment.customer_name}" (${payment.house_no}) ยอดเงิน ฿${formatMoneyDecimal(payment.amount)} ช่องทาง: ${payment.method} เดือน: ${selectedLabels.join(', ')}${payment.note ? ` หมายเหตุ: ${payment.note}` : ''}`,
+            actor_name: staffName || undefined
         });
     }
 
@@ -473,19 +504,49 @@ async function processOnlineApproval(transaction) {
         await saveMonthlyStatusDB(transaction.citizen_id, transaction.fiscal_year, key, 'paid', payment.id);
     }
 
-    // 3. Update transaction status
+    // 3. Auto-save receipt to Google Drive if available
+    let uploadedReceiptUrl = payment.receipt_url || null;
+    if (typeof autoSaveReceiptToDrive === 'function') {
+        try {
+            const driveRes = await autoSaveReceiptToDrive(payment);
+            if (driveRes && (driveRes.receiptUrl || driveRes.slipUrl)) {
+                uploadedReceiptUrl = driveRes.receiptUrl || driveRes.slipUrl;
+                payment.receipt_url = uploadedReceiptUrl;
+            }
+        } catch (err) {
+            console.warn('Auto save receipt in processOnlineApproval failed:', err);
+        }
+    }
+
+    // 4. Update transaction status & receipt_url
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        const updatePayload = { status: 'approved' };
+        if (uploadedReceiptUrl) updatePayload.receipt_url = uploadedReceiptUrl;
         await supabaseClient
             .from('garbage_payment_transactions')
-            .update({ status: 'approved' })
+            .update(updatePayload)
             .eq('id', transaction.id);
     } else {
         const local = JSON.parse(localStorage.getItem('garbage_payment_transactions') || '[]');
         const idx = local.findIndex(x => x.id === transaction.id);
         if (idx >= 0) {
             local[idx].status = 'approved';
+            if (uploadedReceiptUrl) local[idx].receipt_url = uploadedReceiptUrl;
             localStorage.setItem('garbage_payment_transactions', JSON.stringify(local));
         }
+    }
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'payment',
+            action_type: 'APPROVE',
+            action_label: 'อนุมัติการชำระเงินออนไลน์',
+            module: 'รับชำระเงิน',
+            module_key: 'waste-payments',
+            target_id: payment.receipt_no || payment.id,
+            target_name: `${payment.customer_name || '-'} (${payment.house_no || '-'})`,
+            detail: `อนุมัติสลิปชำระออนไลน์และออกใบเสร็จเลขที่ ${payment.receipt_no} ให้ "${payment.customer_name}" ยอดเงิน ฿${formatMoneyDecimal(payment.amount)} เดือน: ${(payment.months_paid || []).join(', ')}`
+        });
     }
 
     return true;
@@ -509,6 +570,20 @@ async function processOnlineRejection(transactionId, reason) {
             localStorage.setItem('garbage_payment_transactions', JSON.stringify(local));
         }
     }
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'payment',
+            action_type: 'REJECT',
+            action_label: 'ปฏิเสธสลิปชำระเงินออนไลน์',
+            module: 'รับชำระเงิน',
+            module_key: 'waste-payments',
+            target_id: String(transactionId),
+            target_name: `รายการโอน #${String(transactionId).substring(0, 8)}`,
+            detail: `ปฏิเสธรายการชำระเงินออนไลน์ รหัส ${transactionId} เหตุผล: ${reason || '-'}`
+        });
+    }
+
     return true;
 }
 
@@ -543,6 +618,20 @@ async function cancelWastePayment(paymentId, reason) {
         }
         await saveMonthlyStatusDB(p.customer_id, monthFiscalYear, WASTE_MONTH_KEYS[idx], 'unpaid', null);
     }
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'payment',
+            action_type: 'UPDATE',
+            action_label: 'ยกเลิกใบเสร็จรับเงิน',
+            module: 'รายงานรายรับ',
+            module_key: 'waste-reports',
+            target_id: p.receipt_no || p.id,
+            target_name: `${p.customer_name || '-'} (${p.house_no || '-'})`,
+            detail: `ยกเลิกใบเสร็จรับเงินเลขที่ ${p.receipt_no || p.id} ของ "${p.customer_name || '-'}" ยอดเงิน ฿${formatMoneyDecimal(p.amount)} สาเหตุ: ${reason || '-'}`
+        });
+    }
+
     return p;
 }
 
@@ -607,6 +696,19 @@ async function deleteWastePayment(paymentId) {
     // 4. Delete from local cache
     const updatedPayments = payments.filter(x => x.id !== paymentId);
     saveWastePayments(updatedPayments);
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'payment',
+            action_type: 'DELETE',
+            action_label: 'ลบข้อมูลใบเสร็จรับเงิน',
+            module: 'รายงานรายรับ',
+            module_key: 'waste-reports',
+            target_id: p.receipt_no || p.id,
+            target_name: `${p.customer_name || '-'} (${p.house_no || '-'})`,
+            detail: `ลบใบเสร็จรับเงินเลขที่ ${p.receipt_no || p.id} ของ "${p.customer_name || '-'}" ยอดเงิน ฿${formatMoneyDecimal(p.amount)}`
+        });
+    }
 
     return true;
 }

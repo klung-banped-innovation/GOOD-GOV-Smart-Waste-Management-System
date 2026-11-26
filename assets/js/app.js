@@ -42,6 +42,7 @@ const NAV_ITEMS = [
     { href: 'waste-register-request.html', icon: 'fa-solid fa-user-plus', label: 'คำขอขึ้นทะเบียน', key: 'waste-register-request', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-cancel-request.html', icon: 'fa-solid fa-user-minus', label: 'คำขอยกเลิกบริการ', key: 'waste-cancel-request', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-excel-import.html', icon: 'fa-solid fa-file-excel', label: 'Smart Excel Import', key: 'waste-excel-import', depts: ['กองคลัง'], parent: 'waste-dashboard' },
+    { href: 'waste-logs.html', icon: 'fa-solid fa-clock-rotate-left', label: 'LOG ประวัติการใช้งาน', key: 'waste-logs', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'waste-settings.html', icon: 'fa-solid fa-gear', label: 'ตั้งค่า', key: 'waste-settings', depts: ['กองคลัง'], parent: 'waste-dashboard' },
     { href: 'publicworks.html', icon: 'fa-solid fa-hard-hat', label: 'กองช่าง', key: 'publicworks', depts: ['กองช่าง'] },
     { href: 'publicworks-electric.html', icon: 'fa-solid fa-bolt', label: 'ซ่อมบำรุงไฟฟ้า', key: 'publicworks-electric', depts: ['กองช่าง'], parent: 'publicworks' },
@@ -99,6 +100,52 @@ const NAV_ITEMS = [
     { href: 'planning.html', icon: 'fa-solid fa-chart-line', label: 'กองยุทธศาสตร์ฯ', key: 'planning', depts: ['กองยุทธศาสตร์ฯ'] },
 ];
 
+/**
+ * ตรวจสอบสิทธิ์การเข้าถึงแต่ละเมนูในระบบค่าธรรมเนียมขยะ ('edit' | 'view' | 'none')
+ */
+function getUserWasteMenuPermission(menuKey) {
+    if (!menuKey || !String(menuKey).startsWith('waste-')) return 'edit';
+    const user = getSessionUser();
+    if (!user) return 'none';
+
+    const userRole = String(user.role || '').toLowerCase();
+    const wasteRole = String(user.waste_role || '').toLowerCase();
+    if (userRole === 'super admin' || userRole === 'admin' || wasteRole === 'admin') {
+        return 'edit';
+    }
+
+    // ตรวจสอบจากข้อมูล waste_staff ล่าสุดใน localStorage (ถ้ามี)
+    try {
+        const rawStaff = localStorage.getItem('waste_staff');
+        if (rawStaff) {
+            const list = JSON.parse(rawStaff) || [];
+            const matched = list.find(s =>
+                (s.username && user.username && s.username === user.username) ||
+                (s.id && user.id && s.id === user.id) ||
+                (s.name && user.name && s.name === user.name)
+            );
+            if (matched) {
+                let cleanRole = String(matched.role || 'Officer');
+                let meta = {};
+                if (cleanRole.includes('||')) {
+                    const parts = cleanRole.split('||');
+                    cleanRole = parts[0] || 'Officer';
+                    try { meta = JSON.parse(parts.slice(1).join('||')) || {}; } catch (e) {}
+                }
+                if (cleanRole.toLowerCase() === 'admin') return 'edit';
+                const perms = matched.permissions || meta.permissions;
+                if (perms && perms[menuKey]) return perms[menuKey];
+            }
+        }
+    } catch (e) {}
+
+    if (user.waste_permissions && user.waste_permissions[menuKey]) {
+        return user.waste_permissions[menuKey];
+    }
+
+    return 'edit';
+}
+
 function buildSidebar(activeKey) {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
@@ -122,6 +169,10 @@ function buildSidebar(activeKey) {
     const userDept = user.dept || '';
 
     const filteredNav = NAV_ITEMS.filter(item => {
+        if (String(item.key).startsWith('waste-')) {
+            const perm = getUserWasteMenuPermission(item.key);
+            if (perm === 'none') return false;
+        }
         if (userRole === 'super admin') return true;
         if (item.depts && item.depts.includes('ALL')) return true;
         return item.depts && item.depts.includes(userDept);
@@ -169,12 +220,18 @@ function buildSidebar(activeKey) {
                     }
                     if (!isFamily) return '';
                 }
+
+                const wastePerm = String(item.key).startsWith('waste-') ? getUserWasteMenuPermission(item.key) : 'edit';
+                const viewOnlyTag = wastePerm === 'view'
+                    ? `<span class="badge bg-info bg-opacity-25 text-info ms-auto" style="font-size:0.62rem;font-weight:500;">ดูอย่างเดียว</span>`
+                    : '';
                 
                 return `
                 <li class="nav-level-${Math.min(level, 3)} ${item.key === activeKey ? 'active' : ''}">
-                    <a href="${item.href}">
+                    <a href="${item.href}" class="d-flex align-items-center">
                         <i class="${item.icon}"></i>
                         <span>${item.label}</span>
+                        ${viewOnlyTag}
                     </a>
                 </li>
                 `;
@@ -334,9 +391,55 @@ function setSessionUser(user, remember = true) {
     const data = JSON.stringify(user);
     if (remember) localStorage.setItem('sgov_user', data);
     else sessionStorage.setItem('sgov_user', data);
+
+    if (user) {
+        try {
+            const logEntry = {
+                id: 'LOG-AUTH-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+                created_at: new Date().toISOString(),
+                category: 'auth',
+                action_type: 'LOGIN',
+                action_label: 'เข้าสู่ระบบ',
+                module: 'ระบบยืนยันตัวตน',
+                module_key: 'auth',
+                target_id: user.username || user.id || '-',
+                target_name: user.name || user.username || 'ผู้ใช้งาน',
+                detail: `เข้าสู่ระบบสำเร็จ (${user.name || user.username || '-'} • สิทธิ์: ${user.waste_role || user.role || '-'})`,
+                actor_name: user.name || user.username || 'ผู้ใช้งาน',
+                actor_role: user.waste_role || user.role || 'Officer',
+                actor_username: user.username || ''
+            };
+            const existingLogs = JSON.parse(localStorage.getItem('waste_system_logs') || '[]');
+            existingLogs.unshift(logEntry);
+            localStorage.setItem('waste_system_logs', JSON.stringify(existingLogs.slice(0, 1500)));
+        } catch (e) {}
+    }
 }
 
 function logout() {
+    try {
+        const user = getSessionUser();
+        if (user) {
+            const logEntry = {
+                id: 'LOG-AUTH-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+                created_at: new Date().toISOString(),
+                category: 'auth',
+                action_type: 'LOGOUT',
+                action_label: 'ออกจากระบบ',
+                module: 'ระบบยืนยันตัวตน',
+                module_key: 'auth',
+                target_id: user.username || user.id || '-',
+                target_name: user.name || user.username || 'ผู้ใช้งาน',
+                detail: `ออกจากระบบ (${user.name || user.username || '-'})`,
+                actor_name: user.name || user.username || 'ผู้ใช้งาน',
+                actor_role: user.waste_role || user.role || 'Officer',
+                actor_username: user.username || ''
+            };
+            const existingLogs = JSON.parse(localStorage.getItem('waste_system_logs') || '[]');
+            existingLogs.unshift(logEntry);
+            localStorage.setItem('waste_system_logs', JSON.stringify(existingLogs.slice(0, 1500)));
+        }
+    } catch (e) {}
     localStorage.removeItem('sgov_user');
     sessionStorage.removeItem('sgov_user');
     window.location.href = 'index.html';
@@ -435,6 +538,113 @@ function generatePromptPayQR(amount, refId) {
     return `https://promptpay.io/${ppId}/${amount}`;
 }
 
+function enforceWasteViewOnlyMode() {
+    const pageContent = document.querySelector('.page-content');
+    if (pageContent && !document.getElementById('wasteViewOnlyBanner')) {
+        const banner = document.createElement('div');
+        banner.id = 'wasteViewOnlyBanner';
+        banner.className = 'alert alert-info border-0 shadow-sm rounded-3 mb-3 py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2';
+        banner.innerHTML = `
+            <div class="text-sm">
+                <i class="fa-solid fa-eye text-primary me-2"></i>
+                <strong>โหมดดูข้อมูลอย่างเดียว (View Only):</strong> บัญชีของคุณได้รับสิทธิ์ให้<strong>ดูข้อมูลในเมนูนี้ได้อย่างเดียว</strong> ไม่สามารถเพิ่ม แก้ไข ลบ นำเข้า (Import) ส่งออกรายงาน (Export) หรือส่งแจ้งเตือน LINE ได้
+            </div>
+            <span class="badge bg-primary rounded-pill">สิทธิ์: ดูอย่างเดียว</span>
+        `;
+        pageContent.insertBefore(banner, pageContent.firstChild);
+    }
+
+    const disableActionEl = (el) => {
+        if (!el) return;
+        if (el.closest('#sidebar') || el.closest('#top-navbar')) return;
+        if (el.dataset.allowSelfEdit === 'true' || el.closest('[data-allow-self-edit="true"]')) return;
+
+        el.disabled = true;
+        el.classList.add('opacity-50', 'disabled');
+        el.title = 'บัญชีของคุณได้รับสิทธิ์ดูข้อมูลอย่างเดียวในเมนูนี้';
+        el.removeAttribute('onclick');
+        if (el.tagName === 'A') {
+            el.removeAttribute('data-bs-toggle');
+            el.removeAttribute('href');
+            el.style.pointerEvents = 'none';
+            el.style.cursor = 'not-allowed';
+        }
+    };
+
+    const lockWriteControls = () => {
+        const writeKeywords = [
+            'เพิ่ม', 'บันทึก', 'แก้ไข', 'ลบ', 'อนุมัติ', 'ปฏิเสธ', 'ยืนยันรับชำระ',
+            'นำเข้า', 'Import', 'Export', 'ส่งออก', 'Excel', 'PDF', 'CSV', 'ดาวน์โหลดเทมเพลต',
+            'ล้างข้อมูล', 'ส่งแจ้งเตือน', 'แจ้งเตือนทั้งหมด', 'แจ้งชำระเงิน', 'แจ้งค้างชำระ', 'แจ้งเตือนทาง LINE',
+            'Generate', 'อัปโหลด'
+        ];
+        const writeSelectors = [
+            'button[type="submit"]',
+            'button[onclick*="openAdd"]',
+            'button[onclick*="edit"]',
+            'button[onclick*="Edit"]',
+            'button[onclick*="delete"]',
+            'button[onclick*="Delete"]',
+            'button[onclick*="save"]',
+            'button[onclick*="Save"]',
+            'button[onclick*="approve"]',
+            'button[onclick*="reject"]',
+            'button[onclick*="toggle"]',
+            'button[onclick*="confirmWalkin"]',
+            'button[onclick*="handleImport"]',
+            'button[onclick*="import"]',
+            'button[onclick*="Import"]',
+            'button[onclick*="openKtbImportTab"]',
+            'a[onclick*="import"]',
+            'a[onclick*="Import"]',
+            '#tabKtbImportLink',
+            'a[href="#tabKtbImport"]',
+            'button[onclick*="export"]',
+            'button[onclick*="Export"]',
+            'button[onclick*="PDF"]',
+            'button[onclick*="pdf"]',
+            'button[onclick*="Excel"]',
+            'button[onclick*="excel"]',
+            'button[onclick*="CSV"]',
+            'button[onclick*="csv"]',
+            'a[onclick*="export"]',
+            'a[onclick*="Export"]',
+            'a[onclick*="PDF"]',
+            'a[onclick*="Excel"]',
+            'button[onclick*="showLineNotifyModal"]',
+            'button[onclick*="LineNotify"]',
+            'button[onclick*="sendLine"]',
+            'button[id^="btn-line-notify-"]',
+            'button[onclick*="promptCancel"]',
+            'button[onclick*="promptDelete"]',
+            'button[onclick*="cancelWaste"]'
+        ];
+
+        document.querySelectorAll(writeSelectors.join(',')).forEach(el => {
+            disableActionEl(el);
+        });
+
+        document.querySelectorAll('.page-content button, .page-content a.nav-link, .modal button').forEach(el => {
+            if (el.dataset.allowSelfEdit === 'true' || el.closest('[data-allow-self-edit="true"]')) return;
+            if (el.dataset.bsDismiss || el.classList.contains('btn-close') || el.classList.contains('year-btn')) return;
+            const txt = (el.innerText || el.title || '').trim();
+            if (el.classList.contains('nav-link')) {
+                if (txt.includes('นำเข้า') || txt.includes('Import') || txt.includes('KTB-Corporate')) {
+                    disableActionEl(el);
+                }
+                return;
+            }
+            if (writeKeywords.some(kw => txt.includes(kw))) {
+                disableActionEl(el);
+            }
+        });
+    };
+
+    lockWriteControls();
+    const obs = new MutationObserver(() => lockWriteControls());
+    obs.observe(document.body, { childList: true, subtree: true });
+}
+
 // =============================================
 // MAIN INIT
 // =============================================
@@ -443,6 +653,7 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // ตรวจสอบสิทธิ์การเข้าถึงหน้า (Page-level Security)
     const currentPage = window.location.pathname.split('/').pop();
+    const currentPageKey = currentPage.replace('.html', '');
     const isLoginPage = currentPage === 'index.html' || currentPage === '' || currentPage === 'index';
 
     if (!user && !isLoginPage) {
@@ -451,7 +662,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (user && !isLoginPage) {
-        const currentNavItem = NAV_ITEMS.find(item => item.href === currentPage);
+        const currentNavItem = NAV_ITEMS.find(item => item.href.split('?')[0] === currentPage || item.key === currentPageKey);
         const userRole = (user.role || '').toLowerCase();
         const userDept = user.dept || '';
 
@@ -469,6 +680,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 else if (userDept === 'กองยุทธศาสตร์ฯ') fallback = 'planning.html';
                 window.location.href = fallback;
                 return;
+            }
+        }
+
+        // ตรวจสอบสิทธิ์รายเมนูของระบบค่าธรรมเนียมขยะ (Waste RBAC)
+        if (currentPageKey.startsWith('waste-') && currentPageKey !== 'waste-payment-portal') {
+            const perm = getUserWasteMenuPermission(currentPageKey);
+            if (perm === 'none') {
+                alert('ขออภัย บัญชีของคุณไม่ได้รับสิทธิ์ให้เข้าถึงเมนูนี้');
+                const allowedWasteItem = NAV_ITEMS.find(i => String(i.key).startsWith('waste-') && getUserWasteMenuPermission(i.key) !== 'none');
+                window.location.href = allowedWasteItem ? allowedWasteItem.href : 'finance.html';
+                return;
+            } else if (perm === 'view') {
+                setTimeout(enforceWasteViewOnlyMode, 150);
             }
         }
 
@@ -509,4 +733,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
     initSidebarToggle();
     initFadeIn();
+
+    // บันทึกประวัติการเข้าใช้งานหน้าเมนูระบบขยะ (Usage Log)
+    if (user && !isLoginPage && currentPageKey.startsWith('waste-')) {
+        try {
+            const lastLoggedPage = sessionStorage.getItem('waste_last_logged_page');
+            if (lastLoggedPage !== currentPageKey) {
+                sessionStorage.setItem('waste_last_logged_page', currentPageKey);
+                const navObj = NAV_ITEMS.find(i => i.key === currentPageKey);
+                const menuLabel = navObj ? navObj.label : currentPageKey;
+                const logEntry = {
+                    id: 'LOG-NAV-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+                    created_at: new Date().toISOString(),
+                    category: 'usage',
+                    action_type: 'VIEW_MENU',
+                    action_label: 'เข้าใช้งานเมนู',
+                    module: menuLabel,
+                    module_key: currentPageKey,
+                    target_id: currentPage,
+                    target_name: menuLabel,
+                    detail: `เข้าเปิดใช้งานหน้าเมนู "${menuLabel}" (${currentPage})`,
+                    actor_name: user.name || user.username || 'ผู้ใช้งาน',
+                    actor_role: user.waste_role || user.role || 'Officer',
+                    actor_username: user.username || ''
+                };
+                const existingLogs = JSON.parse(localStorage.getItem('waste_system_logs') || '[]');
+                existingLogs.unshift(logEntry);
+                localStorage.setItem('waste_system_logs', JSON.stringify(existingLogs.slice(0, 1500)));
+            }
+        } catch (e) {}
+    }
 });

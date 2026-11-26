@@ -8,7 +8,227 @@ document.addEventListener('DOMContentLoaded', async () => {
     await ensureConfiguredSubdistrict();
     loadLinkedCustomers();
     populateSearchMooDropdown();
+    loadLinkModalRegisterStatus();
+
+    const linkModalEl = document.getElementById('linkCustomerModal');
+    if (linkModalEl) {
+        linkModalEl.addEventListener('shown.bs.modal', () => {
+            loadLinkModalRegisterStatus();
+        });
+    }
 });
+
+function openRegisterFromLinkModal() {
+    window.openedRegisterFromLinkModal = true;
+
+    // Pre-fill form fields from search inputs or session if currently empty
+    try {
+        const session = typeof LineAuth !== 'undefined' ? LineAuth.getSession() : null;
+        const regNameEl = document.getElementById('regName');
+        const regHouseNoEl = document.getElementById('regHouseNo');
+        const regMooEl = document.getElementById('regMoo');
+        const regPhoneEl = document.getElementById('regPhone');
+        const searchHouseNoVal = (document.getElementById('searchHouseNo')?.value || '').trim();
+        const searchMooVal = (document.getElementById('searchMoo')?.value || '').trim();
+
+        if (regNameEl && !regNameEl.value && session) {
+            const fullName = session.firstName ? `${session.firstName} ${session.lastName}` : (session.fullName || '');
+            if (fullName) regNameEl.value = fullName;
+        }
+        if (regHouseNoEl && !regHouseNoEl.value) {
+            regHouseNoEl.value = searchHouseNoVal || (session && session.houseNo ? session.houseNo : '');
+        }
+        if (regMooEl && !regMooEl.value) {
+            regMooEl.value = searchMooVal || (session && session.moo ? session.moo : '');
+        }
+        if (regPhoneEl && !regPhoneEl.value && session && session.phone) {
+            regPhoneEl.value = session.phone;
+        }
+    } catch (e) {}
+
+    // Hide linkCustomerModal and open registerWasteModal
+    const linkModalEl = document.getElementById('linkCustomerModal');
+    if (linkModalEl) {
+        const linkModal = bootstrap.Modal.getInstance(linkModalEl);
+        if (linkModal) linkModal.hide();
+    }
+
+    const regModalEl = document.getElementById('registerWasteModal');
+    if (regModalEl) {
+        const regModal = bootstrap.Modal.getInstance(regModalEl) || new bootstrap.Modal(regModalEl);
+        regModal.show();
+    }
+}
+
+function autoSearchApprovedHouse(houseNo, moo) {
+    // Switch to House Search tab
+    const houseTabBtn = document.getElementById('house-tab');
+    if (houseTabBtn) {
+        const tab = bootstrap.Tab.getInstance(houseTabBtn) || new bootstrap.Tab(houseTabBtn);
+        tab.show();
+    }
+    const houseInput = document.getElementById('searchHouseNo');
+    const mooSelect = document.getElementById('searchMoo');
+    if (houseInput) houseInput.value = houseNo || '';
+    if (mooSelect) mooSelect.value = moo || '';
+    searchCustomersForLinking('house');
+}
+
+async function loadLinkModalRegisterStatus(showRefreshFeedback = false) {
+    const statusArea = document.getElementById('linkModalRegStatusArea');
+    if (!statusArea) return;
+
+    const session = typeof LineAuth !== 'undefined' ? LineAuth.getSession() : null;
+    const lineUserId = session ? session.lineUserId : null;
+    const userName = session ? (session.firstName ? `${session.firstName} ${session.lastName}` : (session.fullName || session.lineName || '')) : '';
+
+    if (showRefreshFeedback) {
+        statusArea.style.display = 'block';
+        statusArea.innerHTML = `<div class="p-3 rounded-3 bg-white border text-center text-muted text-sm"><div class="spinner-border spinner-border-sm text-primary me-2"></div>กำลังตรวจสอบสถานะการอนุมัติ...</div>`;
+    }
+
+    let regRequests = [];
+
+    // 1. Fetch from Supabase
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            let q = supabaseClient.from('waste_register_requests').select('*').order('created_at', { ascending: false }).limit(10);
+            if (lineUserId) {
+                q = q.eq('line_user_id', lineUserId);
+            } else if (userName) {
+                q = q.ilike('name', `%${userName}%`);
+            }
+            const { data } = await q;
+            if (data && data.length > 0) {
+                regRequests = data;
+            } else if (userName) {
+                // Fallback query by name if line_user_id didn't match old records
+                const { data: byName } = await supabaseClient
+                    .from('waste_register_requests')
+                    .select('*')
+                    .ilike('name', `%${userName}%`)
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                if (byName && byName.length > 0) regRequests = byName;
+            }
+        } catch (err) {
+            console.warn('Error fetching register status in link modal:', err);
+        }
+    }
+
+    // 2. Merge with localStorage cached requests
+    try {
+        const localMyReqs = JSON.parse(localStorage.getItem('my_waste_reg_requests') || '[]');
+        const localAllReqs = JSON.parse(localStorage.getItem('waste_register_requests') || '[]');
+        const combinedLocal = [...localMyReqs, ...localAllReqs].filter(r => {
+            if (!r) return false;
+            if (lineUserId && r.line_user_id === lineUserId) return true;
+            if (userName && r.name && r.name.includes(userName)) return true;
+            return localMyReqs.includes(r);
+        });
+
+        // If Supabase returned records, sync local cache status with Supabase
+        if (regRequests.length > 0) {
+            localStorage.setItem('my_waste_reg_requests', JSON.stringify(regRequests.slice(0, 10)));
+        } else if (combinedLocal.length > 0) {
+            regRequests = combinedLocal;
+        }
+    } catch (e) {}
+
+    if (!regRequests || regRequests.length === 0) {
+        statusArea.style.display = 'none';
+        statusArea.innerHTML = '';
+        return;
+    }
+
+    // Sort newest first
+    regRequests.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const latestReq = regRequests[0];
+    const dateStr = latestReq.created_at
+        ? new Date(latestReq.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '-';
+
+    statusArea.style.display = 'block';
+
+    if (latestReq.status === 'pending') {
+        statusArea.innerHTML = `
+            <div class="p-3 rounded-3 shadow-sm" style="background: #fffbeb; border: 1px solid #fcd34d; border-left: 5px solid #f59e0b;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <div class="fw-bold text-dark" style="font-size: 0.95rem;">
+                        <i class="fa-solid fa-file-circle-Check text-warning me-1"></i>รายการคำขอลงทะเบียนค่าธรรมเนียมขยะ
+                    </div>
+                    <span class="badge bg-warning text-dark px-3 py-1 rounded-pill fw-bold">
+                        <i class="fa-solid fa-clock me-1"></i>สถานะ: รออนุมัติ
+                    </span>
+                </div>
+                <div class="text-sm text-dark mb-1">
+                    <strong>ผู้ยื่นคำขอ:</strong> ${latestReq.name || '-'} &nbsp;|&nbsp;
+                    <strong>บ้านเลขที่:</strong> ${latestReq.house_no || '-'} หมู่ที่ ${latestReq.moo || '-'} &nbsp;|&nbsp;
+                    <strong>ประเภท:</strong> ${latestReq.type || '-'}
+                </div>
+                <div class="text-xs text-muted mb-2">
+                    <i class="fa-regular fa-calendar me-1"></i>ยื่นคำขอเมื่อ: ${dateStr} น.
+                </div>
+                <div class="p-2 rounded bg-white border border-warning border-opacity-50 text-xs text-dark d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fa-solid fa-hourglass-half text-warning me-1"></i>อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบและอนุมัติ เมื่ออนุมัติแล้วจะสามารถค้นหาบ้านเลขที่และเชื่อมโยงข้อมูลได้ตามปกติ</span>
+                    <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold rounded-pill px-2 py-1" onclick="loadLinkModalRegisterStatus(true)">
+                        <i class="fa-solid fa-rotate-right me-1"></i>เช็คสถานะ
+                    </button>
+                </div>
+            </div>
+        `;
+    } else if (latestReq.status === 'approved') {
+        const hNo = (latestReq.house_no || '').replace(/'/g, "\\'");
+        const moo = (latestReq.moo || '').replace(/'/g, "\\'");
+        statusArea.innerHTML = `
+            <div class="p-3 rounded-3 shadow-sm" style="background: #f0fdf4; border: 1px solid #86efac; border-left: 5px solid #16a34a;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <div class="fw-bold text-success" style="font-size: 0.95rem;">
+                        <i class="fa-solid fa-circle-check me-1"></i>คำขอลงทะเบียนได้รับการอนุมัติแล้ว!
+                    </div>
+                    <span class="badge bg-success px-3 py-1 rounded-pill fw-bold">
+                        <i class="fa-solid fa-check me-1"></i>สถานะ: อนุมัติแล้ว
+                    </span>
+                </div>
+                <div class="text-sm text-dark mb-2">
+                    <strong>ชื่อ:</strong> ${latestReq.name || '-'} &nbsp;|&nbsp;
+                    <strong>บ้านเลขที่:</strong> ${latestReq.house_no || '-'} หมู่ที่ ${latestReq.moo || '-'} &nbsp;|&nbsp;
+                    <strong>ประเภท:</strong> ${latestReq.type || '-'}
+                </div>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 bg-white p-2 rounded border border-success border-opacity-25">
+                    <span class="text-xs text-success fw-semibold">
+                        <i class="fa-solid fa-hand-point-up me-1"></i>เจ้าหน้าที่อนุมัติข้อมูลแล้ว กดปุ่มเพื่อค้นหาบ้านเลขที่และกดเลือกเชื่อมโยงข้อมูลได้ทันที
+                    </span>
+                    <button type="button" class="btn btn-sm btn-success rounded-pill fw-bold px-3 shadow-sm" onclick="autoSearchApprovedHouse('${hNo}', '${moo}')">
+                        <i class="fa-solid fa-magnifying-glass me-1"></i>ค้นหาบ้านเลขที่ ${latestReq.house_no} เพื่อเชื่อมโยง
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Auto-populate and trigger search if search box is currently empty
+        const searchHouseInput = document.getElementById('searchHouseNo');
+        if (searchHouseInput && !searchHouseInput.value.trim() && latestReq.house_no) {
+            autoSearchApprovedHouse(latestReq.house_no, latestReq.moo || '');
+        }
+    } else if (latestReq.status === 'rejected') {
+        statusArea.innerHTML = `
+            <div class="p-3 rounded-3 shadow-sm" style="background: #fef2f2; border: 1px solid #fca5a5; border-left: 5px solid #dc2626;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
+                    <div class="fw-bold text-danger" style="font-size: 0.95rem;">
+                        <i class="fa-solid fa-circle-xmark me-1"></i>คำขอลงทะเบียนไม่ได้รับการอนุมัติ
+                    </div>
+                    <span class="badge bg-danger px-3 py-1 rounded-pill fw-bold">สถานะ: ไม่อนุมัติ</span>
+                </div>
+                <div class="text-sm text-dark mb-1">
+                    <strong>บ้านเลขที่:</strong> ${latestReq.house_no || '-'} หมู่ที่ ${latestReq.moo || '-'} (${latestReq.name || '-'})
+                </div>
+                ${latestReq.note ? `<div class="text-xs text-danger"><strong>เหตุผล:</strong> ${latestReq.note}</div>` : ''}
+                <div class="text-xs text-muted mt-1">ท่านสามารถตรวจสอบข้อมูลและกดปุ่มลงทะเบียนด้านล่างเพื่อยื่นคำขอใหม่ได้</div>
+            </div>
+        `;
+    }
+}
 
 async function ensureConfiguredSubdistrict() {
     if (window.orgSubdistrictName) return window.orgSubdistrictName;
@@ -197,7 +417,12 @@ async function searchCustomersForLinking(mode) {
         if (error) throw error;
 
         if (!data || data.length === 0) {
-            resultDiv.innerHTML = '<div class="text-center text-muted py-3">ไม่พบข้อมูล หรือบัญชีไม่ทำงาน</div>';
+            resultDiv.innerHTML = `
+                <div class="text-center text-muted py-3 px-2">
+                    <div class="fw-semibold text-danger mb-1"><i class="fa-solid fa-circle-exclamation me-1"></i>ไม่พบข้อมูลในฐานข้อมูล</div>
+                    <div class="text-xs text-muted">หากยังไม่มีฐานข้อมูลการชำระค่าธรรมเนียมขยะกับเทศบาลเมืองบ้านเป็ด กรุณากดปุ่ม <strong>"ลงทะเบียนค่าธรรมเนียมขยะ"</strong> ด้านล่าง</div>
+                </div>
+            `;
             return;
         }
 

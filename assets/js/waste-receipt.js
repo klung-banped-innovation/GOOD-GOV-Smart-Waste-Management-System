@@ -63,6 +63,12 @@ async function buildReceiptHTML(payment) {
         monthsText = Array.isArray(payment.months_paid) ? payment.months_paid.join(', ') : payment.months_paid;
     }
 
+    var noteText = '';
+    if (payment) {
+        if (payment.note) noteText = String(payment.note).trim();
+        else if (payment.status === 'completed' && payment.reject_reason) noteText = String(payment.reject_reason).trim();
+    }
+
     var htmlString = `
     <!DOCTYPE html><html><head><meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -97,7 +103,11 @@ async function buildReceiptHTML(payment) {
         <div class="info-grid">
             <div class="info-item"><div class="info-label">เลขที่ใบเสร็จ</div><div class="info-value">${payment.receipt_no || '-'}</div></div>
             <div class="info-item"><div class="info-label">วันที่</div><div class="info-value">${formatThaiDateFull(payment.date)}</div></div>
-            <div class="info-item"><div class="info-label">ชื่อผู้ชำระ</div><div class="info-value">${payment.customer_name || '-'}</div></div>
+            <div class="info-item">
+                <div class="info-label">ชื่อผู้ชำระ</div>
+                <div class="info-value">${payment.customer_name || '-'}</div>
+                ${noteText ? `<div style="font-size:12px;color:#4b5563;font-weight:500;margin-top:2px;">หมายเหตุ: ${noteText}</div>` : ''}
+            </div>
             <div class="info-item"><div class="info-label">บ้านเลขที่</div><div class="info-value">${payment.house_no || '-'}</div></div>
             <div class="info-item"><div class="info-label">เดือนที่ชำระ</div><div class="info-value" style="font-size:12px;">${monthsText}</div></div>
             <div class="info-item"><div class="info-label">ช่องทางชำระ</div><div class="info-value">${payment.method || '-'}</div></div>
@@ -122,6 +132,11 @@ async function buildSlipHTML(payment) {
     var settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
     var orgName = settings.org_name || 'เทศบาลตำบล GOOD GOV';
     var orgLogo = settings.org_logo ? '<img src="' + settings.org_logo + '" class="org-logo-img" style="max-width:80px; margin-bottom:15px;">' : '';
+    var noteText = '';
+    if (payment) {
+        if (payment.note) noteText = String(payment.note).trim();
+        else if (payment.status === 'completed' && payment.reject_reason) noteText = String(payment.reject_reason).trim();
+    }
     
     var staffSignatureHTML = '<div style="height:25px;"></div><div>(ลายมือชื่อ) ..........................................</div>';
     if (payment.staff && typeof supabaseClient !== 'undefined') {
@@ -165,6 +180,7 @@ async function buildSlipHTML(payment) {
     '<div class="row"><span>เลขที่:</span><span>' + (payment.receipt_no || '-') + '</span></div>' +
     '<div class="row"><span>วันที่:</span><span>' + dateFormatted + '</span></div><hr>' +
     '<div class="row"><span>ชื่อ:</span><span>' + (payment.customer_name || '-') + '</span></div>' +
+    (noteText ? '<div class="row" style="font-size:15px;color:#4b5563;"><span>หมายเหตุ:</span><span>' + noteText + '</span></div>' : '') +
     '<div class="row"><span>บ้านเลขที่:</span><span>' + (payment.house_no || '-') + '</span></div>' +
     '<div class="row" style="align-items:flex-start;"><span>เดือน:</span><span style="text-align:right;">' + monthsText + '</span></div>' +
     '<div class="row"><span>ช่องทาง:</span><span>' + (payment.method || '-') + '</span></div><hr>' +
@@ -180,6 +196,13 @@ async function buildSlipHTML(payment) {
 
 // === อัปโหลดใบเสร็จไป Google Drive อัตโนมัติ ===
 async function autoSaveReceiptToDrive(payment) {
+    if (!payment) return null;
+    if (payment.receipt_url && String(payment.receipt_url).startsWith('http')) {
+        return { receiptUrl: payment.receipt_url, slipUrl: payment.slip_url || '' };
+    }
+    if (payment._driveUploadPromise) {
+        return payment._driveUploadPromise;
+    }
     if (!GOOGLE_APPS_SCRIPT_URL) {
         console.warn('GOOGLE_APPS_SCRIPT_URL ยังไม่ได้ตั้งค่า — ข้ามการอัปโหลด');
         return null;
@@ -227,80 +250,102 @@ async function autoSaveReceiptToDrive(payment) {
                     document.body.removeChild(iframe);
                     reject(e);
                 });
-            }, 1000);
+            }, 800);
         });
     }
 
-    var a4Html = await buildReceiptHTML(payment);
-    var slipHtml = await buildSlipHTML(payment);
-    
-    var baseName = (payment.receipt_no || payment.id).replace(/[\/\\]/g, '-');
-    var settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
-    var orgPrefix = settings.org_name ? settings.org_name.replace(/\s+/g, '_') : 'Org';
+    payment._driveUploadPromise = (async () => {
+        var a4Html = await buildReceiptHTML(payment);
+        var slipHtml = await buildSlipHTML(payment);
+        
+        var baseName = (payment.receipt_no || payment.id).replace(/[\/\\]/g, '-');
+        var settings = JSON.parse(localStorage.getItem('waste_settings') || '{}');
+        var orgPrefix = settings.org_name ? settings.org_name.replace(/\s+/g, '_') : 'Org';
 
-    try {
-        var a4Base64 = await htmlToImageBase64(a4Html, 794); // A4 width at 96 DPI, height auto-crops to content
-        var slipBase64 = await htmlToImageBase64(slipHtml, 794); // Slip width (A4 width)
+        try {
+            var a4Base64 = await htmlToImageBase64(a4Html, 794); // A4 width at 96 DPI, height auto-crops to content
+            var slipBase64 = await htmlToImageBase64(slipHtml, 794); // Slip width (A4 width)
 
-        var response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-                files: [
-                    {
-                        key: 'receipt',
-                        name: orgPrefix + '_Receipt_' + baseName + '.jpg',
-                        mimeType: 'image/jpeg',
-                        base64: a4Base64
-                    },
-                    {
-                        key: 'slip',
-                        name: orgPrefix + '_slip_' + baseName + '.jpg',
-                        mimeType: 'image/jpeg',
-                        base64: slipBase64
+            var response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({
+                    files: [
+                        {
+                            key: 'receipt',
+                            name: orgPrefix + '_Receipt_' + baseName + '.jpg',
+                            mimeType: 'image/jpeg',
+                            base64: a4Base64
+                        },
+                        {
+                            key: 'slip',
+                            name: orgPrefix + '_slip_' + baseName + '.jpg',
+                            mimeType: 'image/jpeg',
+                            base64: slipBase64
+                        }
+                    ]
+                })
+            });
+
+            var result = await response.json();
+
+            if (result.success && result.urls) {
+                const receiptUrl = result.urls.receipt;
+                const slipUrl = result.urls.slip;
+                
+                console.log('✅ อัปโหลดไป Drive สำเร็จ:', result.urls);
+
+                // อัปเดตในตัวแปร payment โดยตรง
+                payment.receipt_url = receiptUrl;
+                if (slipUrl) payment.slip_url = slipUrl;
+
+                // บันทึก URL ลง Supabase
+                if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    var updateData = { receipt_url: receiptUrl };
+                    if (slipUrl) {
+                        updateData.slip_url = slipUrl;
                     }
-                ]
-            })
-        });
-
-        var result = await response.json();
-
-        if (result.success && result.urls) {
-            const receiptUrl = result.urls.receipt;
-            const slipUrl = result.urls.slip;
-            
-            console.log('✅ อัปโหลดไป Drive สำเร็จ:', result.urls);
-
-            // บันทึก URL ลง Supabase
-            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-                var updateData = { receipt_url: receiptUrl };
-                if (slipUrl) {
-                    updateData.slip_url = slipUrl;
+                    await supabaseClient.from('waste_payments').update(updateData).eq('id', payment.id);
                 }
-                await supabaseClient.from('waste_payments').update(updateData).eq('id', payment.id);
-            }
 
-            // บันทึก URL ลง localStorage ด้วย
-            var payments = JSON.parse(localStorage.getItem('waste_payments') || '[]');
-            var idx = payments.findIndex(function (x) { return x.id === payment.id; });
-            if (idx >= 0) {
-                payments[idx].receipt_url = receiptUrl;
-                if (slipUrl) payments[idx].slip_url = slipUrl;
-                localStorage.setItem('waste_payments', JSON.stringify(payments));
-            }
+                // อัปเดตใน statePayments ในหน่วยความจำ
+                if (typeof getWastePayments === 'function') {
+                    var memList = getWastePayments();
+                    if (Array.isArray(memList)) {
+                        var mIdx = memList.findIndex(function (x) { return x.id === payment.id; });
+                        if (mIdx >= 0) {
+                            memList[mIdx].receipt_url = receiptUrl;
+                            if (slipUrl) memList[mIdx].slip_url = slipUrl;
+                        }
+                    }
+                }
 
-            return { receiptUrl, slipUrl };
-        } else {
-            var errMsg1 = result.error || 'Apps Script returned success: false';
-            console.warn('❌ อัปโหลด Drive ล้มเหลว:', errMsg1);
-            if (typeof Swal !== 'undefined') Swal.fire('อัปโหลด Drive ล้มเหลว', String(errMsg1), 'error');
-            return { error: errMsg1 };
+                // บันทึก URL ลง localStorage ด้วย
+                try {
+                    var payments = JSON.parse(localStorage.getItem('waste_payments') || '[]');
+                    var idx = payments.findIndex(function (x) { return x.id === payment.id; });
+                    if (idx >= 0) {
+                        payments[idx].receipt_url = receiptUrl;
+                        if (slipUrl) payments[idx].slip_url = slipUrl;
+                        localStorage.setItem('waste_payments', JSON.stringify(payments));
+                    }
+                } catch (e) {}
+
+                return { receiptUrl, slipUrl };
+            } else {
+                var errMsg1 = result.error || 'Apps Script returned success: false';
+                console.warn('❌ อัปโหลด Drive ล้มเหลว:', errMsg1);
+                return { error: errMsg1 };
+            }
+        } catch (err) {
+            console.warn('❌ อัปโหลด Drive error:', err.message);
+            return { error: err.message };
+        } finally {
+            delete payment._driveUploadPromise;
         }
-    } catch (err) {
-        console.warn('❌ อัปโหลด Drive error:', err.message);
-        if (typeof Swal !== 'undefined') Swal.fire('เกิดข้อผิดพลาดในการอัปโหลด Drive', err.message, 'error');
-        return { error: err.message };
-    }
+    })();
+
+    return payment._driveUploadPromise;
 }
 
 // === ดาวน์โหลดใบเสร็จ + เปิด Drive folder (manual) ===

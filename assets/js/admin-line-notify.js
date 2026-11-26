@@ -33,8 +33,81 @@ async function fetchLineNotifiedPayments() {
     }
 }
 
+async function resolvePaymentReceiptUrl(paymentId, receiptNo, initialUrl) {
+    if (initialUrl && String(initialUrl).startsWith('http')) return initialUrl;
+
+    // 1. Check currentSuccessPayment (from waste-payments.html)
+    let targetPayment = null;
+    if (typeof window !== 'undefined' && window.currentSuccessPayment) {
+        const cp = window.currentSuccessPayment;
+        if ((paymentId && cp.id === paymentId) || (receiptNo && cp.receipt_no === receiptNo)) {
+            targetPayment = cp;
+        }
+    }
+
+    // 2. Check getWastePayments() in memory
+    if (!targetPayment && typeof getWastePayments === 'function') {
+        const list = getWastePayments() || [];
+        targetPayment = list.find(p => (paymentId && p.id === paymentId) || (receiptNo && p.receipt_no === receiptNo)) || null;
+    }
+
+    if (targetPayment) {
+        if (targetPayment.receipt_url && String(targetPayment.receipt_url).startsWith('http')) {
+            return targetPayment.receipt_url;
+        }
+        if (targetPayment.slip_url && String(targetPayment.slip_url).startsWith('http')) {
+            return targetPayment.slip_url;
+        }
+        if (targetPayment._driveUploadPromise) {
+            try {
+                const res = await targetPayment._driveUploadPromise;
+                if (res && (res.receiptUrl || res.slipUrl)) {
+                    return res.receiptUrl || res.slipUrl;
+                }
+            } catch (e) {}
+        }
+    }
+
+    // 3. Check Supabase waste_payments table
+    if (paymentId && typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const { data } = await supabaseClient
+                .from('waste_payments')
+                .select('*')
+                .eq('id', paymentId)
+                .maybeSingle();
+            if (data) {
+                if (data.receipt_url && String(data.receipt_url).startsWith('http')) {
+                    if (targetPayment) targetPayment.receipt_url = data.receipt_url;
+                    return data.receipt_url;
+                }
+                if (!targetPayment) targetPayment = data;
+            }
+        } catch (e) {}
+    }
+
+    // 4. Generate and upload receipt/slip on-the-fly if autoSaveReceiptToDrive is available
+    if (targetPayment && typeof autoSaveReceiptToDrive === 'function') {
+        try {
+            const res = await autoSaveReceiptToDrive(targetPayment);
+            if (res && (res.receiptUrl || res.slipUrl)) {
+                return res.receiptUrl || res.slipUrl;
+            }
+        } catch (e) {
+            console.warn('Auto generate receipt for LINE notify failed:', e);
+        }
+    }
+
+    return '';
+}
+
 async function showLineNotifyModal(customerId, notifyType, overrideAmount = null, overrideReceipt = null, overridePaymentId = null, overrideReceiptUrl = null, overrideUnpaidCount = null, overrideUnpaidMonthsText = null) {
     if (!customerId) return;
+    const currentPageKey = window.location.pathname.split('/').pop().replace('.html', '');
+    if (typeof getUserWasteMenuPermission === 'function' && getUserWasteMenuPermission(currentPageKey) === 'view') {
+        Swal.fire('สิทธิ์ดูได้อย่างเดียว', 'บัญชีของคุณได้รับสิทธิ์ดูข้อมูลในเมนูนี้ได้อย่างเดียว ไม่สามารถส่งแจ้งเตือน LINE ได้', 'warning');
+        return;
+    }
     
     // Add hidden input for receipt url if it doesn't exist
     if (!document.getElementById('lineNotifyReceiptUrl')) {
@@ -43,7 +116,22 @@ async function showLineNotifyModal(customerId, notifyType, overrideAmount = null
         hiddenInput.id = 'lineNotifyReceiptUrl';
         document.getElementById('lineNotifyModal').appendChild(hiddenInput);
     }
-    document.getElementById('lineNotifyReceiptUrl').value = overrideReceiptUrl || '';
+
+    let resolvedReceiptUrl = overrideReceiptUrl || '';
+    if (notifyType === 'PAYMENT_SUCCESS' && !resolvedReceiptUrl) {
+        // Quick synchronous check from memory first
+        if (typeof window !== 'undefined' && window.currentSuccessPayment) {
+            const cp = window.currentSuccessPayment;
+            if ((overridePaymentId && cp.id === overridePaymentId) || (overrideReceipt && cp.receipt_no === overrideReceipt)) {
+                resolvedReceiptUrl = cp.receipt_url || cp.slip_url || '';
+            }
+        }
+        if (!resolvedReceiptUrl && typeof getWastePayments === 'function') {
+            const found = (getWastePayments() || []).find(p => (overridePaymentId && p.id === overridePaymentId) || (overrideReceipt && p.receipt_no === overrideReceipt));
+            if (found) resolvedReceiptUrl = found.receipt_url || found.slip_url || '';
+        }
+    }
+    document.getElementById('lineNotifyReceiptUrl').value = resolvedReceiptUrl;
 
     // Add hidden input for unpaid info if it doesn't exist
     if (!document.getElementById('lineNotifyUnpaidCount')) {
@@ -92,6 +180,14 @@ async function showLineNotifyModal(customerId, notifyType, overrideAmount = null
     const alertEl = document.getElementById('lineNotifyAlertInfo');
     const amountEl = document.getElementById('lineNotifyAmount');
 
+    // Ensure attachment info element exists inside alertEl
+    let attachInfoEl = document.getElementById('lineNotifyReceiptAttachmentInfo');
+    if (!attachInfoEl && alertEl) {
+        attachInfoEl = document.createElement('div');
+        attachInfoEl.id = 'lineNotifyReceiptAttachmentInfo';
+        alertEl.appendChild(attachInfoEl);
+    }
+
     // Calculate amount based on type
     let amount = 0;
     if (notifyType === 'PAYMENT_SUCCESS') {
@@ -110,9 +206,18 @@ async function showLineNotifyModal(customerId, notifyType, overrideAmount = null
                 document.getElementById('lineNotifyReceiptNo').value = receiptNoEl.value;
             }
         }
+
+        if (attachInfoEl) {
+            if (resolvedReceiptUrl) {
+                attachInfoEl.innerHTML = `<div class="mt-2 pt-2 border-top d-flex align-items-center justify-content-between" style="font-size:0.85rem;"><span class="text-success fw-semibold"><i class="fa-solid fa-paperclip me-1"></i>แนบสลิป/ใบเสร็จรับเงินพร้อมส่ง</span><a href="${resolvedReceiptUrl}" target="_blank" class="badge bg-success text-white text-decoration-none"><i class="fa-solid fa-eye me-1"></i>ดูสลิป</a></div>`;
+            } else {
+                attachInfoEl.innerHTML = `<div class="mt-2 pt-2 border-top text-success fw-semibold" style="font-size:0.85rem;"><i class="fa-solid fa-paperclip me-1"></i>แนบสลิป/ใบเสร็จรับเงินไปพร้อมข้อความแจ้งเตือน</div>`;
+            }
+        }
     } else if (notifyType === 'OVERDUE') {
         titleEl.innerHTML = '<i class="fa-solid fa-circle-exclamation text-danger me-2"></i>แจ้งค้างชำระ';
         alertEl.style.background = '#fef2f2';
+        if (attachInfoEl) attachInfoEl.innerHTML = '';
         
         if (overrideAmount !== null) {
             amount = parseFloat(overrideAmount);
@@ -142,8 +247,22 @@ async function showLineNotifyModal(customerId, notifyType, overrideAmount = null
     document.getElementById('lineNotifyCountBadge').textContent = '-';
     document.getElementById('lineNotifyPreviousStatus').innerHTML = '';
     
-    const modal = new bootstrap.Modal(document.getElementById('lineNotifyModal'));
+    const modalEl = document.getElementById('lineNotifyModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
+
+    // Background resolve receipt URL if PAYMENT_SUCCESS and not yet populated
+    if (notifyType === 'PAYMENT_SUCCESS' && !resolvedReceiptUrl) {
+        resolvePaymentReceiptUrl(overridePaymentId, overrideReceipt, '').then(url => {
+            if (url) {
+                const urlInput = document.getElementById('lineNotifyReceiptUrl');
+                if (urlInput) urlInput.value = url;
+                if (attachInfoEl) {
+                    attachInfoEl.innerHTML = `<div class="mt-2 pt-2 border-top d-flex align-items-center justify-content-between" style="font-size:0.85rem;"><span class="text-success fw-semibold"><i class="fa-solid fa-paperclip me-1"></i>แนบสลิป/ใบเสร็จรับเงินพร้อมส่ง</span><a href="${url}" target="_blank" class="badge bg-success text-white text-decoration-none"><i class="fa-solid fa-eye me-1"></i>ดูสลิป</a></div>`;
+                }
+            }
+        });
+    }
     
     // Fetch active LINE links
     try {
@@ -226,6 +345,15 @@ async function sendLineNotification() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังส่งข้อความ...';
     
     try {
+        let receiptUrl = document.getElementById('lineNotifyReceiptUrl') ? document.getElementById('lineNotifyReceiptUrl').value : '';
+        if (notifyType === 'PAYMENT_SUCCESS' && !receiptUrl) {
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังแนบสลิปใบเสร็จและส่งข้อความ...';
+            receiptUrl = await resolvePaymentReceiptUrl(paymentId, receiptNo, receiptUrl);
+            if (receiptUrl && document.getElementById('lineNotifyReceiptUrl')) {
+                document.getElementById('lineNotifyReceiptUrl').value = receiptUrl;
+            }
+        }
+
         const payload = {
             customer_id: customerId,
             notification_type: notifyType,
@@ -234,7 +362,7 @@ async function sendLineNotification() {
             house_no: houseNo,
             receipt_no: receiptNo,
             payment_id: paymentId || undefined,
-            receipt_url: document.getElementById('lineNotifyReceiptUrl') ? document.getElementById('lineNotifyReceiptUrl').value : undefined,
+            receipt_url: receiptUrl || undefined,
             unpaid_count: unpaidCount,
             unpaid_months_text: unpaidMonthsText,
             payment_url: notifyType === 'OVERDUE' ? 'https://good-gov-banped-smart-waste-managem.vercel.app/' : undefined
@@ -287,6 +415,12 @@ async function sendLineNotification() {
                         bellBtn.classList.remove('btn-warning');
                         bellBtn.classList.add('btn-success');
                         bellBtn.innerHTML = '<i class="fa-solid fa-check text-white"></i>';
+                    }
+                    const popupLineBtn = document.getElementById('btn-popup-line-notify');
+                    if (popupLineBtn) {
+                        popupLineBtn.classList.remove('btn-outline-success');
+                        popupLineBtn.classList.add('btn-success', 'text-white');
+                        popupLineBtn.innerHTML = '<i class="fa-brands fa-line me-1 fa-lg"></i> แจ้งชำระเงินแล้ว';
                     }
                 }
                 

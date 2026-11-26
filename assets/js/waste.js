@@ -537,26 +537,78 @@ async function saveWasteCustomerDB(data) {
     const idx = customers.findIndex(c => c.id === data.id);
     if (idx >= 0) customers[idx] = data; else customers.push(data);
     saveWasteData('customers', customers);
+
+    // บันทึก LOG ประวัติการเพิ่ม/แก้ไขข้อมูลลูกค้า
+    if (typeof logWasteActivity === 'function') {
+        const isUpdate = !!existing;
+        const feeChangedText = (existing && Number(existing.fee) !== Number(data.fee))
+            ? ` (ปรับอัตราค่าธรรมเนียมจาก ฿${existing.fee} เป็น ฿${data.fee}/เดือน)`
+            : '';
+        const statusChangedText = (existing && existing.status !== data.status)
+            ? ` (เปลี่ยนสถานะเป็น ${data.status === 'active' ? 'ใช้งานปกติ' : 'ยกเลิกบริการ'})`
+            : '';
+        logWasteActivity({
+            category: 'edit',
+            action_type: isUpdate ? 'UPDATE' : 'CREATE',
+            action_label: isUpdate ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มทะเบียนลูกค้าใหม่',
+            module: 'ทะเบียนลูกค้า',
+            module_key: 'waste-customers',
+            target_id: data.id,
+            target_name: `${data.name || '-'} (บ้านเลขที่ ${data.house_no || '-'} ม.${data.moo || '-'})`,
+            detail: `${isUpdate ? 'แก้ไข' : 'เพิ่ม'}ข้อมูลลูกค้า รหัส ${data.id} ชื่อ "${data.name || '-'}" บ้านเลขที่ ${data.house_no || '-'} ม.${data.moo || '-'} ประเภท: ${data.type || '-'} อัตรา ฿${data.fee || 0}/ด.${feeChangedText}${statusChangedText}`
+        });
+    }
+
     await fetchWasteCustomers(); // Update state
 }
 
 async function deleteWasteCustomerDB(id) {
+    const existing = getWasteCustomers().find(c => c.id === id);
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         const { error } = await supabaseClient.from('waste_customers').delete().eq('id', id);
         if (error) console.error('Error deleting customer in Supabase:', error);
     }
     const customers = getWasteData('customers').filter(c => c.id !== id);
     saveWasteData('customers', customers);
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'edit',
+            action_type: 'DELETE',
+            action_label: 'ลบข้อมูลลูกค้า',
+            module: 'ทะเบียนลูกค้า',
+            module_key: 'waste-customers',
+            target_id: id,
+            target_name: existing ? `${existing.name || '-'} (${existing.house_no} ม.${existing.moo})` : id,
+            detail: `ลบทะเบียนลูกค้ารหัส ${id}${existing ? ` ชื่อ "${existing.name}" บ้านเลขที่ ${existing.house_no} ม.${existing.moo}` : ''}`
+        });
+    }
+
     await fetchWasteCustomers();
 }
 
 async function deleteWasteFeeTypeDB(id) {
+    const existingFee = getWasteFeeTypes().find(f => String(f.id) === String(id));
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         const { error } = await supabaseClient.from('waste_fee_types').delete().eq('id', id);
         if (error) console.error('Error deleting fee type in Supabase:', error);
     }
     const fees = getWasteData('feeTypes').filter(c => c.id !== id);
     saveWasteData('feeTypes', fees);
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'setting',
+            action_type: 'DELETE',
+            action_label: 'ลบประเภทอัตราค่าธรรมเนียม',
+            module: 'ตั้งค่าระบบขยะ',
+            module_key: 'waste-settings',
+            target_id: String(id),
+            target_name: existingFee ? existingFee.type : String(id),
+            detail: `ลบประเภทอัตราค่าธรรมเนียม "${existingFee ? `${existingFee.type} (฿${existingFee.fee}/เดือน)` : id}"`
+        });
+    }
+
     await fetchWasteFeeTypes();
 }
 
@@ -573,7 +625,11 @@ async function fetchWastePayments() {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         const { data, error } = await fetchAllFromSupabase('waste_payments', 'created_at', false);
         if (!error && data) {
-            // Convert months_paid from Postgres text[] to JS array (already handled by supabase-js)
+            data.forEach(p => {
+                if (!p.note && p.status === 'completed' && p.reject_reason) {
+                    p.note = p.reject_reason;
+                }
+            });
             statePayments = data;
             saveWasteData('payments', data); // backup
             return data;
@@ -592,7 +648,7 @@ function getWastePayments() {
 async function saveWastePaymentDB(payment) {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         // Ensure months_paid is an array for Postgres text[]
-        const record = {
+        const baseRecord = {
             id: payment.id,
             receipt_no: payment.receipt_no || null,
             customer_id: payment.customer_id,
@@ -607,11 +663,24 @@ async function saveWastePaymentDB(payment) {
             status: payment.status,
             staff: payment.staff || null,
             source: payment.source || 'walk-in',
-            reject_reason: payment.reject_reason || null
+            reject_reason: payment.reject_reason || payment.note || null
         };
-        const { error } = await supabaseClient
+        const extendedRecord = Object.assign({}, baseRecord, {
+            note: payment.note || null
+        });
+
+        let { error } = await supabaseClient
             .from('waste_payments')
-            .upsert(record, { onConflict: 'id' });
+            .upsert(extendedRecord, { onConflict: 'id' });
+
+        // Fallback หากยังไม่ได้รัน SQL เพิ่มคอลัมน์ note
+        if (error && error.message && error.message.includes('note')) {
+            const retryRes = await supabaseClient
+                .from('waste_payments')
+                .upsert(baseRecord, { onConflict: 'id' });
+            error = retryRes.error;
+        }
+
         if (error) {
             console.error('Error saving payment to Supabase:', error);
             if (error.code === '23505' || (error.message && error.message.toLowerCase().includes('unique constraint')) || (error.message && error.message.toLowerCase().includes('duplicate key'))) {
@@ -853,8 +922,95 @@ function saveMonthlyStatus(d) {
 }
 
 // ============================================
-// STAFF — Supabase CRUD
+// STAFF & MENU PERMISSIONS — Supabase CRUD
 // ============================================
+const WASTE_SYSTEM_MENUS = [
+    { key: 'waste-dashboard',        label: 'แดชบอร์ดค่าธรรมเนียมขยะ', icon: 'fa-solid fa-chart-pie',           desc: 'ภาพรวมสถิติ รายรับ และสถานะการจัดเก็บ' },
+    { key: 'waste-customers',        label: 'ทะเบียนลูกค้า',           icon: 'fa-solid fa-address-book',        desc: 'จัดการข้อมูลครัวเรือน เพิ่ม/แก้ไข/นำเข้า/ส่งออก' },
+    { key: 'waste-payments',         label: 'รับชำระเงิน',             icon: 'fa-solid fa-hand-holding-dollar', desc: 'รับชำระหน้าเคาน์เตอร์ ตรวจสอบสลิป และออกใบเสร็จ' },
+    { key: 'waste-reports',          label: 'รายงานรายรับ',            icon: 'fa-solid fa-chart-bar',           desc: 'รายงานสรุปรายรับประจำวัน ประจำเดือน และส่งออก PDF/Excel' },
+    { key: 'waste-kor3',             label: 'กค.3 รายเดือน',           icon: 'fa-solid fa-table-cells',         desc: 'สมุดคุมลูกหนี้และสถิติการชำระรายเดือน (กค.3)' },
+    { key: 'waste-invoices',         label: 'ใบแจ้งหนี้ค่าขยะ',         icon: 'fa-solid fa-file-invoice',        desc: 'สร้างและพิมพ์ใบแจ้งหนี้ค่าธรรมเนียมขยะ / QR / Barcode' },
+    { key: 'waste-debtors',          label: 'ลูกหนี้ค้างชำระ',          icon: 'fa-solid fa-user-clock',          desc: 'ติดตามลูกหนี้ค้างชำระ แจ้งเตือน LINE และพิมพ์หนังสือทวงหนี้' },
+    { key: 'waste-map',              label: 'แผนที่ลูกค้า',             icon: 'fa-solid fa-map-location-dot',    desc: 'แผนที่พิกัดหลังคาเรือนและสถานะการชำระเงิน (GIS)' },
+    { key: 'waste-staff',            label: 'เจ้าหน้าที่ / กำหนดสิทธิ์', icon: 'fa-solid fa-users-gear',          desc: 'จัดการบัญชีเจ้าหน้าที่ รหัสผ่าน และกำหนดสิทธิ์การเข้าถึงเมนู' },
+    { key: 'waste-register-request', label: 'คำขอขึ้นทะเบียน',         icon: 'fa-solid fa-user-plus',           desc: 'ตรวจสอบและอนุมัติคำขอขึ้นทะเบียนผู้ชำระรายใหม่' },
+    { key: 'waste-cancel-request',   label: 'คำขอยกเลิกบริการ',        icon: 'fa-solid fa-user-minus',          desc: 'ตรวจสอบและอนุมัติคำขอยกเลิกบริการ/ย้ายออก' },
+    { key: 'waste-excel-import',     label: 'Smart Excel Import',      icon: 'fa-solid fa-file-excel',          desc: 'นำเข้าข้อมูลการชำระเงินและฐานข้อมูลจากไฟล์ Excel / KTB' },
+    { key: 'waste-logs',             label: 'LOG ประวัติการใช้งาน',    icon: 'fa-solid fa-clock-rotate-left',   desc: 'ตรวจสอบประวัติการแก้ไขข้อมูล ประวัติการรับชำระ และการใช้งานระบบ' },
+    { key: 'waste-settings',         label: 'ตั้งค่าระบบขยะ',           icon: 'fa-solid fa-gear',                desc: 'ตั้งค่าข้อมูลหน่วยงาน บัญชีธนาคาร Comcode และใบเสร็จ' }
+];
+
+function getDefaultWastePermissions(role) {
+    const isAdmin = String(role || '').toLowerCase() === 'admin';
+    const perms = {};
+    WASTE_SYSTEM_MENUS.forEach(m => {
+        if (isAdmin) {
+            perms[m.key] = 'edit';
+        } else {
+            // ค่าเริ่มต้นสำหรับเจ้าหน้าที่ทั่วไป
+            if (['waste-settings'].includes(m.key)) {
+                perms[m.key] = 'none';
+            } else if (['waste-staff', 'waste-reports', 'waste-kor3', 'waste-map', 'waste-dashboard', 'waste-logs'].includes(m.key)) {
+                perms[m.key] = 'view';
+            } else {
+                perms[m.key] = 'edit';
+            }
+        }
+    });
+    return perms;
+}
+
+function unpackWasteStaffRecord(row) {
+    if (!row) return row;
+    const copy = Object.assign({}, row);
+    let rawRole = String(copy.role || 'Officer');
+    let meta = {};
+
+    if (rawRole.includes('||')) {
+        const parts = rawRole.split('||');
+        copy.role = parts[0] || 'Officer';
+        try {
+            meta = JSON.parse(parts.slice(1).join('||')) || {};
+        } catch (e) {
+            meta = {};
+        }
+    }
+
+    copy.title = copy.title || meta.title || '';
+    copy.first_name = copy.first_name || meta.first_name || '';
+    copy.last_name = copy.last_name || meta.last_name || '';
+    copy.email = copy.email || meta.email || '';
+    copy.password = copy.password || meta.password || '';
+    copy.department = copy.department || meta.department || 'กองคลัง';
+
+    // แยกชื่อ-นามสกุลอัตโนมัติหากมีเฉพาะ name
+    if (!copy.first_name && copy.name) {
+        const titles = ['ว่าที่ ร.ต.', 'นางสาว', 'นาย', 'นาง', 'ดร.'];
+        let cleanName = String(copy.name).trim();
+        for (const t of titles) {
+            if (cleanName.startsWith(t)) {
+                if (!copy.title) copy.title = t;
+                cleanName = cleanName.slice(t.length).trim();
+                break;
+            }
+        }
+        const nameParts = cleanName.split(/\s+/);
+        copy.first_name = nameParts[0] || '';
+        copy.last_name = nameParts.slice(1).join(' ') || '';
+    }
+
+    const defaultPerms = getDefaultWastePermissions(copy.role);
+    const savedPerms = copy.permissions || meta.permissions || {};
+    if (String(copy.role).toLowerCase() === 'admin') {
+        copy.permissions = getDefaultWastePermissions('Admin');
+    } else {
+        copy.permissions = Object.assign({}, defaultPerms, savedPerms);
+    }
+
+    return copy;
+}
+
 async function fetchWasteStaff() {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         const { data, error } = await supabaseClient
@@ -862,19 +1018,26 @@ async function fetchWasteStaff() {
             .select('*')
             .order('id', { ascending: true });
         if (!error && data) {
-            stateStaff = data;
-            saveWasteData('staff', data);
-            return data;
+            stateStaff = data.map(unpackWasteStaffRecord);
+            saveWasteData('staff', stateStaff);
+            return stateStaff;
         } else if (error) {
             console.warn('Supabase fetch staff error, falling back to localStorage', error);
         }
     }
-    stateStaff = getWasteData('staff');
+    stateStaff = (getWasteData('staff') || []).map(unpackWasteStaffRecord);
     return stateStaff;
 }
 
-function getWasteStaff() { return stateStaff !== null ? stateStaff : getWasteData('staff'); }
-function saveWasteStaff(d) { saveWasteData('staff', d); stateStaff = d; }
+function getWasteStaff() {
+    const list = stateStaff !== null ? stateStaff : getWasteData('staff');
+    return (list || []).map(unpackWasteStaffRecord);
+}
+function saveWasteStaff(d) {
+    const unpacked = (d || []).map(unpackWasteStaffRecord);
+    saveWasteData('staff', unpacked);
+    stateStaff = unpacked;
+}
 
 // GAS URL สำหรับอัปโหลดรูปภาพพนักงาน (ให้ User นำ Web App URL มาใส่ที่นี่)
 const GAS_STAFF_IMG_URL = 'https://script.google.com/macros/s/AKfycbwlba_trt6vEhQX64vZUZ2Ay1JTKKXjccI86IRIYRcMAK1cf9j9CT_jBcnyygqeS9Hr/exec';
@@ -889,8 +1052,8 @@ async function uploadWasteStaffImage(base64Data, filename) {
         const payload = { 
             base64: b64Str, 
             filename: filename,
-            action: 'uploadFile', // in case it uses the standard script
-            data: b64Str // in case it uses the standard script
+            action: 'uploadFile',
+            data: b64Str
         };
         const res = await fetch(GAS_STAFF_IMG_URL, {
             method: 'POST',
@@ -910,27 +1073,128 @@ async function uploadWasteStaffImage(base64Data, filename) {
 }
 
 async function saveWasteStaffDB(data) {
+    const unpacked = unpackWasteStaffRecord(data);
+
+    // Pack extended RBAC metadata into role column for 100% compatibility with waste_staff table schema
+    const metaToPack = {
+        title: unpacked.title || '',
+        first_name: unpacked.first_name || '',
+        last_name: unpacked.last_name || '',
+        email: unpacked.email || '',
+        password: unpacked.password || '',
+        department: unpacked.department || 'กองคลัง',
+        permissions: unpacked.permissions || getDefaultWastePermissions(unpacked.role)
+    };
+    const packedRole = `${unpacked.role || 'Officer'}||${JSON.stringify(metaToPack)}`;
+
+    const dbPayloadBase = {
+        id: unpacked.id,
+        name: unpacked.name,
+        position: unpacked.position || '',
+        username: unpacked.username || '',
+        role: packedRole,
+        phone: unpacked.phone || '',
+        status: unpacked.status || 'active',
+        profile_image_url: unpacked.profile_image_url || '',
+        signature_image_url: unpacked.signature_image_url || ''
+    };
+
+    const dbPayloadExtended = Object.assign({}, dbPayloadBase, {
+        title: unpacked.title || '',
+        first_name: unpacked.first_name || '',
+        last_name: unpacked.last_name || '',
+        email: unpacked.email || '',
+        password: unpacked.password || '',
+        department: unpacked.department || 'กองคลัง',
+        permissions: unpacked.permissions || getDefaultWastePermissions(unpacked.role)
+    });
+
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-        // อัปเดตข้อมูลใน Supabase
-        // ทำการลบค่าที่เป็น null หรือ undefined ออกก่อนส่ง (กันพลาด)
-        Object.keys(data).forEach(key => { if (data[key] === undefined) delete data[key]; });
-        
-        const { error } = await supabaseClient.from('waste_staff').upsert(data);
+        let { error } = await supabaseClient.from('waste_staff').upsert(dbPayloadExtended);
+        if (error) {
+            // Fallback กรณีที่ยังไม่ได้รัน SQL เพิ่มคอลัมน์ใหม่ ให้บันทึกด้วยโครงสร้าง 10 คอลัมน์เดิมทันที
+            const retryRes = await supabaseClient.from('waste_staff').upsert(dbPayloadBase);
+            error = retryRes.error;
+        }
         if (error) {
             console.error('Error saving waste_staff to Supabase', error);
             Swal.fire('เกิดข้อผิดพลาดฐานข้อมูล', error.message || JSON.stringify(error), 'error');
             return false;
         }
+
+        // ซิงค์ข้อมูล Username / Password ไปยังตาราง Staff หลักของระบบ เพื่อให้ใช้ล็อกอินหน้าแรก (index.html) ได้เหมือนระบบตั้งค่า
+        if (unpacked.username) {
+            try {
+                const { data: existingMainStaff } = await supabaseClient
+                    .from('Staff')
+                    .select('id, password')
+                    .eq('username', unpacked.username)
+                    .maybeSingle();
+
+                const mainStaffPayload = {
+                    title: unpacked.title || '',
+                    first_name: unpacked.first_name || unpacked.name || '',
+                    last_name: unpacked.last_name || '',
+                    full_name: unpacked.name || `${unpacked.title || ''}${unpacked.first_name || ''} ${unpacked.last_name || ''}`.trim(),
+                    phone: unpacked.phone || '',
+                    email: unpacked.email || '',
+                    position: unpacked.position || 'เจ้าหน้าที่ระบบขยะ',
+                    department: unpacked.department || 'กองคลัง',
+                    username: unpacked.username,
+                    password: unpacked.password || (existingMainStaff ? existingMainStaff.password : '123456'),
+                    role: String(unpacked.role).toLowerCase() === 'admin' ? 'Department Head' : 'Officer',
+                    avatar_url: unpacked.profile_image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(unpacked.name || 'U')}&background=1a56db&color=fff`,
+                    status: unpacked.status || 'active'
+                };
+
+                if (existingMainStaff && existingMainStaff.id) {
+                    await supabaseClient.from('Staff').update(mainStaffPayload).eq('id', existingMainStaff.id);
+                } else if (unpacked.password) {
+                    mainStaffPayload.created_at = new Date();
+                    await supabaseClient.from('Staff').insert([mainStaffPayload]);
+                }
+            } catch (syncErr) {
+                console.warn('Could not sync waste_staff to Staff table:', syncErr);
+            }
+        }
     }
+
     // Update local cache
-    const idx = stateStaff.findIndex(s => s.id === data.id);
-    if (idx >= 0) stateStaff[idx] = data;
-    else stateStaff.push(data);
+    if (!Array.isArray(stateStaff)) stateStaff = getWasteStaff();
+    const idx = stateStaff.findIndex(s => s.id === unpacked.id);
+    const isUpdateStaff = idx >= 0;
+    if (idx >= 0) stateStaff[idx] = unpacked;
+    else stateStaff.push(unpacked);
     saveWasteStaff(stateStaff);
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'edit',
+            action_type: isUpdateStaff ? 'UPDATE' : 'CREATE',
+            action_label: isUpdateStaff ? 'แก้ไขข้อมูลเจ้าหน้าที่/สิทธิ์' : 'เพิ่มเจ้าหน้าที่ใหม่',
+            module: 'เจ้าหน้าที่รับชำระ',
+            module_key: 'waste-staff',
+            target_id: unpacked.id,
+            target_name: `${unpacked.name || '-'} (${unpacked.username || '-'})`,
+            detail: `${isUpdateStaff ? 'แก้ไข' : 'เพิ่ม'}ข้อมูลเจ้าหน้าที่ "${unpacked.name}" (Username: ${unpacked.username || '-'}, ตำแหน่ง: ${unpacked.position || '-'}, บทบาท: ${unpacked.role || 'Officer'})`
+        });
+    }
+
+    // หากผู้ที่กำลังแก้ไขคือผู้ใช้ที่ล็อกอินอยู่ในปัจจุบัน ให้อัปเดตสิทธิ์ใน Session ทันที
+    try {
+        const currUser = typeof getSessionUser === 'function' ? getSessionUser() : null;
+        if (currUser && (currUser.username === unpacked.username || currUser.id === unpacked.id || currUser.name === unpacked.name)) {
+            currUser.waste_role = unpacked.role;
+            currUser.waste_permissions = unpacked.permissions;
+            localStorage.setItem('sgov_user', JSON.stringify(currUser));
+        }
+    } catch (e) {}
+
     return true;
 }
 
 async function deleteWasteStaffDB(id) {
+    const existingStaff = getWasteStaff().find(s => s.id === id);
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         const { error } = await supabaseClient.from('waste_staff').delete().eq('id', id);
         if (error) {
@@ -939,8 +1203,22 @@ async function deleteWasteStaffDB(id) {
             return false;
         }
     }
-    stateStaff = stateStaff.filter(s => s.id !== id);
+    stateStaff = (stateStaff || []).filter(s => s.id !== id);
     saveWasteStaff(stateStaff);
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'edit',
+            action_type: 'DELETE',
+            action_label: 'ลบบัญชีเจ้าหน้าที่',
+            module: 'เจ้าหน้าที่รับชำระ',
+            module_key: 'waste-staff',
+            target_id: id,
+            target_name: existingStaff ? existingStaff.name : id,
+            detail: `ลบข้อมูลเจ้าหน้าที่รหัส ${id}${existingStaff ? ` ชื่อ "${existingStaff.name}" (${existingStaff.username || '-'})` : ''}`
+        });
+    }
+
     return true;
 }
 
@@ -969,7 +1247,58 @@ async function saveRegisterRequestDB(data) {
     const idx = reqs.findIndex(r => r.id === data.id);
     if (idx >= 0) reqs[idx] = data; else reqs.push(data);
     saveWasteData('registerReqs', reqs);
+
+    if (typeof logWasteActivity === 'function') {
+        const stMap = { approved: 'อนุมัติคำขอขึ้นทะเบียน', rejected: 'ปฏิเสธคำขอขึ้นทะเบียน', pending: 'แก้ไขคำขอขึ้นทะเบียน' };
+        const actMap = { approved: 'APPROVE', rejected: 'REJECT', pending: 'UPDATE' };
+        logWasteActivity({
+            category: 'request',
+            action_type: actMap[data.status] || 'UPDATE',
+            action_label: stMap[data.status] || 'บันทึกคำขอขึ้นทะเบียน',
+            module: 'คำขอขึ้นทะเบียน',
+            module_key: 'waste-register-request',
+            target_id: String(data.id || '-'),
+            target_name: `${data.name || '-'} (บ้านเลขที่ ${data.house_no || '-'} ม.${data.moo || '-'})`,
+            detail: `${stMap[data.status] || 'บันทึกคำขอ'} ผู้ขอ: "${data.name || '-'}" บ้านเลขที่ ${data.house_no || '-'} ม.${data.moo || '-'} ประเภท: ${data.type || '-'}${data.fee ? ` อัตรา ฿${data.fee}/ด.` : ''}${data.note ? ` หมายเหตุ: ${data.note}` : ''}`
+        });
+    }
+
     await fetchRegisterRequestsDB();
+}
+
+async function deleteRegisterRequestDB(id) {
+    const existingReq = getRegisterRequests().find(r => String(r.id) === String(id));
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        const { error } = await supabaseClient.from('waste_register_requests').delete().eq('id', id);
+        if (error) {
+            console.error('Error deleting register req from Supabase:', error);
+            throw error;
+        }
+    }
+    const reqs = getWasteData('registerReqs').filter(r => String(r.id) !== String(id));
+    saveWasteData('registerReqs', reqs);
+    if (Array.isArray(stateRegisterReqs)) {
+        stateRegisterReqs = stateRegisterReqs.filter(r => String(r.id) !== String(id));
+    }
+    try {
+        const myReqs = JSON.parse(localStorage.getItem('my_waste_reg_requests') || '[]').filter(r => String(r.id) !== String(id));
+        localStorage.setItem('my_waste_reg_requests', JSON.stringify(myReqs));
+    } catch (e) {}
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'request',
+            action_type: 'DELETE',
+            action_label: 'ลบคำขอขึ้นทะเบียน',
+            module: 'คำขอขึ้นทะเบียน',
+            module_key: 'waste-register-request',
+            target_id: String(id),
+            target_name: existingReq ? `${existingReq.name || '-'} (${existingReq.house_no} ม.${existingReq.moo})` : String(id),
+            detail: `ลบรายการคำขอขึ้นทะเบียน รหัส ${id}${existingReq ? ` ของ "${existingReq.name}" บ้านเลขที่ ${existingReq.house_no} ม.${existingReq.moo}` : ''}`
+        });
+    }
+
+    return true;
 }
 
 function saveRegisterRequests(d) { saveWasteData('registerReqs', d); stateRegisterReqs = d; }
@@ -999,7 +1328,54 @@ async function saveCancelRequestDB(data) {
     const idx = reqs.findIndex(r => r.id === data.id);
     if (idx >= 0) reqs[idx] = data; else reqs.push(data);
     saveWasteData('cancelReqs', reqs);
+
+    if (typeof logWasteActivity === 'function') {
+        const stMap = { approved: 'อนุมัติคำขอยกเลิกบริการ', rejected: 'ปฏิเสธคำขอยกเลิกบริการ', pending: 'แก้ไขคำขอยกเลิกบริการ' };
+        const actMap = { approved: 'APPROVE', rejected: 'REJECT', pending: 'UPDATE' };
+        logWasteActivity({
+            category: 'request',
+            action_type: actMap[data.status] || 'UPDATE',
+            action_label: stMap[data.status] || 'บันทึกคำขอยกเลิกบริการ',
+            module: 'คำขอยกเลิกบริการ',
+            module_key: 'waste-cancel-request',
+            target_id: String(data.id || '-'),
+            target_name: `${data.name || '-'} (บ้านเลขที่ ${data.house_no || '-'} ม.${data.moo || '-'})`,
+            detail: `${stMap[data.status] || 'บันทึกคำขอยกเลิก'} ผู้ขอ: "${data.name || '-'}" บ้านเลขที่ ${data.house_no || '-'} ม.${data.moo || '-'} เหตุผล: ${data.reason || '-'}`
+        });
+    }
+
     await fetchCancelRequestsDB();
+}
+
+async function deleteCancelRequestDB(id) {
+    const existingCan = getCancelRequests().find(r => String(r.id) === String(id));
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        const { error } = await supabaseClient.from('waste_cancel_requests').delete().eq('id', id);
+        if (error) {
+            console.error('Error deleting cancel req from Supabase:', error);
+            throw error;
+        }
+    }
+    const reqs = getWasteData('cancelReqs').filter(r => String(r.id) !== String(id));
+    saveWasteData('cancelReqs', reqs);
+    if (Array.isArray(stateCancelReqs)) {
+        stateCancelReqs = stateCancelReqs.filter(r => String(r.id) !== String(id));
+    }
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'request',
+            action_type: 'DELETE',
+            action_label: 'ลบคำขอยกเลิกบริการ',
+            module: 'คำขอยกเลิกบริการ',
+            module_key: 'waste-cancel-request',
+            target_id: String(id),
+            target_name: existingCan ? `${existingCan.name || '-'} (${existingCan.house_no} ม.${existingCan.moo})` : String(id),
+            detail: `ลบรายการคำขอยกเลิกบริการ รหัส ${id}${existingCan ? ` ของ "${existingCan.name}" บ้านเลขที่ ${existingCan.house_no} ม.${existingCan.moo}` : ''}`
+        });
+    }
+
+    return true;
 }
 
 // ============================================
@@ -1035,6 +1411,21 @@ async function saveWasteExemptionDB(data) {
     if (idx >= 0) exemptions[idx] = data; else exemptions.unshift(data);
     saveWasteData('exemptions', exemptions);
     stateExemptions = exemptions;
+
+    if (typeof logWasteActivity === 'function') {
+        const monthsTxt = Array.isArray(data.months_exempted) ? data.months_exempted.join(', ') : (data.months_exempted || '-');
+        logWasteActivity({
+            category: 'payment',
+            action_type: 'EXEMPT',
+            action_label: 'บันทึกยกเว้นค่าธรรมเนียม',
+            module: 'รับชำระเงิน',
+            module_key: 'waste-payments',
+            target_id: data.id || data.customer_id || '-',
+            target_name: `${data.customer_name || '-'} (${data.house_no || '-'})`,
+            detail: `ยกเว้นค่าธรรมเนียมขยะให้ "${data.customer_name || '-'}" (${data.house_no || '-'}) เดือน: ${monthsTxt} สาเหตุ: ${data.reject_reason || '-'}`,
+            actor_name: data.staff || undefined
+        });
+    }
 }
 
 async function cancelWasteExemptionDB(id) {
@@ -1074,6 +1465,19 @@ async function cancelWasteExemptionDB(id) {
         } catch (e) {
             console.warn('Local storage quota exceeded for monthly status. Skipping local cache.');
         }
+    }
+
+    if (typeof logWasteActivity === 'function') {
+        logWasteActivity({
+            category: 'payment',
+            action_type: 'DELETE',
+            action_label: 'ยกเลิกรายการยกเว้นค่าธรรมเนียม',
+            module: 'รายงานรายรับ',
+            module_key: 'waste-reports',
+            target_id: id,
+            target_name: `${ex.customer_name || '-'} (${ex.house_no || '-'})`,
+            detail: `ยกเลิกรายการยกเว้นค่าธรรมเนียม รหัส ${id} ของ "${ex.customer_name || '-'}" (${ex.house_no || '-'})`
+        });
     }
 }
 
@@ -1327,6 +1731,60 @@ function getMonthlyRevenueData() {
         }
     });
     return data;
+}
+
+// ============================================
+// SYSTEM AUDIT & USAGE LOGS (LOG ประวัติการแก้ไข & การใช้งานระบบ)
+// ============================================
+function getCurrentWasteActor() {
+    try {
+        const u = typeof getSessionUser === 'function' ? getSessionUser() : JSON.parse(localStorage.getItem('sgov_user') || sessionStorage.getItem('sgov_user') || 'null');
+        if (u) {
+            return {
+                name: u.name || u.username || 'เจ้าหน้าที่',
+                role: u.waste_role || u.role || 'Officer',
+                username: u.username || ''
+            };
+        }
+    } catch (e) {}
+    return { name: 'ระบบ/เจ้าหน้าที่', role: 'System', username: '' };
+}
+
+async function logWasteActivity(params = {}) {
+    try {
+        const actor = getCurrentWasteActor();
+        const entry = {
+            id: params.id || ('LOG-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)),
+            created_at: params.created_at || new Date().toISOString(),
+            category: params.category || 'edit', // 'edit' | 'payment' | 'request' | 'usage' | 'auth' | 'setting'
+            action_type: params.action_type || 'UPDATE', // 'CREATE' | 'UPDATE' | 'DELETE' | 'PAYMENT' | 'APPROVE' | 'REJECT' | 'EXEMPT' | 'VIEW_MENU' | 'LOGIN' | 'LOGOUT'
+            action_label: params.action_label || 'แก้ไขข้อมูล',
+            module: params.module || 'ระบบค่าธรรมเนียมขยะ',
+            module_key: params.module_key || 'waste-system',
+            target_id: String(params.target_id || '-'),
+            target_name: String(params.target_name || '-'),
+            detail: String(params.detail || '-'),
+            actor_name: params.actor_name || actor.name,
+            actor_role: params.actor_role || actor.role,
+            actor_username: params.actor_username || actor.username
+        };
+
+        // 1. บันทึกลง localStorage
+        const existing = JSON.parse(localStorage.getItem('waste_system_logs') || '[]');
+        existing.unshift(entry);
+        localStorage.setItem('waste_system_logs', JSON.stringify(existing.slice(0, 1500)));
+
+        // 2. บันทึกลงตาราง waste_system_logs ใน Supabase (ถ้ามีตารางนี้แล้ว)
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            supabaseClient.from('waste_system_logs').insert([entry]).then(({ error }) => {
+                // หากยังไม่ได้สร้างตาราง waste_system_logs ใน Supabase ให้ข้ามโดยไม่แสดง Error รบกวนผู้ใช้
+            }).catch(() => {});
+        }
+        return entry;
+    } catch (e) {
+        console.warn('logWasteActivity warning:', e);
+        return null;
+    }
 }
 
 // Initialize on load
