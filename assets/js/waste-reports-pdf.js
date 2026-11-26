@@ -125,16 +125,17 @@ function formatPaymentMethodPDF(method) {
     return m;
 }
 
-function exportDailyPDF() {
+function exportDailyPDF(customDate) {
     const orgName = getOrgNamePDF();
-    var filterDate = document.getElementById('filterDate').value;
+    var filterDateEl = document.getElementById('filterDate');
+    var filterDate = customDate || (filterDateEl ? filterDateEl.value : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }));
     if (!filterDate) { Swal.fire('กรุณาเลือกวันที่', '', 'warning'); return; }
 
     var payments = getWastePayments();
     var customers = getWasteCustomers();
     var todayPayments = payments.filter(function(p) { return p.date === filterDate && p.status === 'completed'; });
 
-    var totalAmount = todayPayments.reduce(function(s,p){ return s + p.amount; }, 0);
+    var totalAmount = todayPayments.reduce(function(s,p){ return s + parseFloat(p.amount || 0); }, 0);
 
     // Build table rows
     var rowsHtml = '';
