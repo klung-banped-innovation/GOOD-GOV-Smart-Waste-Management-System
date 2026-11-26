@@ -72,23 +72,8 @@
         <h6 class="fw-semibold text-muted mb-3" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">โมดูลย่อย</h6>
         <div class="row g-3 mb-4">
             <div class="col-6 col-md-3">
-                <a href="#" class="module-tile opacity-75" style="background:linear-gradient(135deg,#1a56db,#3b82f6); cursor:not-allowed;" onclick="return false;">
-                    <i class="fa-solid fa-map-location-dot"></i><h5>ระบบแผนที่ภาษี</h5><small>(ยังไม่มีบริการ)</small>
-                </a>
-            </div>
-            <div class="col-6 col-md-3">
                 <a href="waste-dashboard.html" class="module-tile" style="background:linear-gradient(135deg,#057a55,#10b981);">
                     <i class="fa-solid fa-trash-can"></i><h5>ค่าธรรมเนียมขยะ</h5><small>Dashboard · รับชำระ · กค.3</small>
-                </a>
-            </div>
-            <div class="col-6 col-md-3">
-                <a href="#" class="module-tile opacity-75" style="background:linear-gradient(135deg,#0694a2,#22d3ee); cursor:not-allowed;" onclick="return false;">
-                    <i class="fa-solid fa-faucet-drip"></i><h5>ประปาหมู่บ้าน</h5><small>(ยังไม่มีบริการ)</small>
-                </a>
-            </div>
-            <div class="col-6 col-md-3">
-                <a href="#" class="module-tile opacity-75" style="background:linear-gradient(135deg,#5b21b6,#8b5cf6); cursor:not-allowed;" onclick="return false;">
-                    <i class="fa-solid fa-boxes-stacked"></i><h5>พัสดุและครุภัณฑ์</h5><small>(ยังไม่มีบริการ)</small>
                 </a>
             </div>
         </div>
@@ -97,7 +82,7 @@
         <div class="card">
             <div class="card-header border-0 d-flex justify-content-between align-items-center">
                 <h6 class="fw-bold mb-0"><i class="fa-solid fa-receipt text-primary me-2"></i>รายการรับชำระเงินวันนี้</h6>
-                <button class="btn btn-sm btn-outline-primary" onclick="showToast('กำลังพิมพ์รายงาน...','info')"><i class="fa-solid fa-print"></i></button>
+                <button class="btn btn-sm btn-outline-primary" onclick="exportDailyPDF()" title="พิมพ์รายงานประจำวัน"><i class="fa-solid fa-print"></i></button>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -125,6 +110,7 @@
 <script src="assets/js/supabase-client.js"></script>
 <script src="assets/js/app.js?v=1781176864661"></script>
 <script src="assets/js/waste.js?v=1781176864661"></script>
+<script src="assets/js/waste-reports-pdf.js"></script>
 <script src="assets/js/responsive.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function() {
